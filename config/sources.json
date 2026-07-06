@@ -112,6 +112,36 @@
       "tags": ["vulnerability-research", "research-blog", "daily-disabled"]
     },
     {
+      "slug": "trail-of-bits",
+      "name": "Trail of Bits Blog",
+      "source_type": "blogs",
+      "tier": "t3-research-blog",
+      "track": "industry",
+      "adapter": "rss",
+      "enabled": true,
+      "aliases": ["trail of bits", "trail-of-bits", "trailofbits"],
+      "urls": {
+        "homepage": "https://blog.trailofbits.com/",
+        "rss": "https://blog.trailofbits.com/feed/"
+      },
+      "tags": ["vulnerability-research", "software-security", "research-blog"]
+    },
+    {
+      "slug": "google-security-blog",
+      "name": "Google Online Security Blog",
+      "source_type": "blogs",
+      "tier": "t3-research-blog",
+      "track": "industry",
+      "adapter": "rss",
+      "enabled": true,
+      "aliases": ["google online security blog", "google security blog"],
+      "urls": {
+        "homepage": "https://security.googleblog.com/",
+        "rss": "https://security.googleblog.com/feeds/posts/default?alt=rss"
+      },
+      "tags": ["vulnerability-research", "platform-security", "research-blog"]
+    },
+    {
       "slug": "openai-blog",
       "name": "OpenAI Blog",
       "source_type": "blogs",
@@ -125,6 +155,21 @@
         "rss": "https://openai.com/news/rss.xml"
       },
       "tags": ["frontier-ai", "ai-security"]
+    },
+    {
+      "slug": "github-blog-security",
+      "name": "GitHub Blog Security",
+      "source_type": "blogs",
+      "tier": "t3-research-blog",
+      "track": "industry",
+      "adapter": "rss",
+      "enabled": true,
+      "aliases": ["github security blog", "github blog security"],
+      "urls": {
+        "homepage": "https://github.blog/security/",
+        "rss": "https://github.blog/security/feed/"
+      },
+      "tags": ["supply-chain-security", "developer-security", "research-blog"]
     },
     {
       "slug": "anthropic-news",
@@ -161,6 +206,36 @@
         "exclude_url_contains": ["/rss.xml"]
       },
       "tags": ["vulnerability-research", "research-blog"]
+    },
+    {
+      "slug": "assetnote-research",
+      "name": "Assetnote Research",
+      "source_type": "blogs",
+      "tier": "t3-research-blog",
+      "track": "industry",
+      "adapter": "rss",
+      "enabled": true,
+      "aliases": ["assetnote", "assetnote research"],
+      "urls": {
+        "homepage": "https://www.assetnote.io/resources/research",
+        "rss": "https://www.assetnote.io/resources/research/rss.xml"
+      },
+      "tags": ["vulnerability-research", "web-security", "research-blog"]
+    },
+    {
+      "slug": "bishopfox-blog",
+      "name": "Bishop Fox Blog",
+      "source_type": "blogs",
+      "tier": "t3-research-blog",
+      "track": "industry",
+      "adapter": "rss",
+      "enabled": true,
+      "aliases": ["bishop fox", "bishopfox", "bishop fox blog"],
+      "urls": {
+        "homepage": "https://bishopfox.com/blog",
+        "rss": "https://bishopfox.com/blog/rss.xml"
+      },
+      "tags": ["vulnerability-research", "attack-surface", "research-blog"]
     },
     {
       "slug": "hacktron-ai",

@@ -22,6 +22,7 @@
 - RawFetch + canonical_id + upsert 已经提供可重跑基础
 - source metadata 已集中到 `config/sources.json`
 - enabled RSS source 已支持通过通用 `RSSFeedCrawler` 进入 raw JSON 链路
+- curated research blog RSS 源已扩展：Trail of Bits、Google Online Security Blog、GitHub Blog Security、Assetnote Research、Bishop Fox Blog 均进入集中配置并复用通用 RSS crawler；GitHub Security Lab feed 当前返回 0 entries，暂不接入默认配置
 - enabled sitemap source 已支持通过通用 `SitemapCrawler` 进入 raw JSON 链路；Anthropic News 当前走 sitemap
 - enabled webpage source 已支持通过通用 `WebpageCrawler` 进入 raw JSON 链路；Brutecat / HackTron 已通过 live smoke
 - DEF CON 已使用专用 talk crawler 抓取公开 speaker/talk 页面，输出进入 Industry conferences lane；crawler 会优先探测当前年份对应届数，当前 DEF CON 34 speakers 页在 2026-07-03 实测 404，因此回退展示 DEF CON 33，并在卡片上显式标记届数
@@ -270,6 +271,7 @@
 - 2026-07-06: 完成 RR-056；本地 353 条 ACM CCS 2025 T1 paper 已归档，Dashboard / Artifacts 不再用 2025 顶替 CCS 2026。Artifact 浏览页新增 `q` 搜索框，默认空搜索展示当前 track 下全部 displayable artifacts，搜索命中 title / source / summary / tags / academic focus labels，并保留分页参数。
 - 2026-07-06: 准备处理 RR-057 Dashboard 搜索框；用户澄清搜索框应加在 Dashboard 首页。本次不新增 schema、不改 source、不改 scoring/triage 阈值，只把现有 artifact 搜索能力接入 Dashboard 卡片过滤，并保留日期范围语义。
 - 2026-07-06: 完成 RR-057；Dashboard 现在支持 `q` 搜索框，空搜索保持默认视图，非空搜索会过滤当前日期范围下的 academic / industry 卡片；Today / 7 days / Custom 日期控件会保留搜索词，Clear 会回到当前范围的未搜索视图。
+- 2026-07-06: 准备并完成 RR-058 Curated research blog RSS expansion；用户指出博客系统数据源偏少。本次新增 Trail of Bits、Google Online Security Blog、GitHub Blog Security、Assetnote Research、Bishop Fox Blog 五个 enabled RSS source，全部复用现有 RSS crawler，不新增 schema、不改 scoring/triage 阈值；GitHub Security Lab feed 当前返回 0 entries，暂不纳入默认配置。
 - 2026-06-16: 准备处理 Zotero 个性化相关度路线的文档落位；假设本次只新增设计文档和 backlog，不涉及 schema 变更、scoring 阈值变更、新 source 接入或 report 文件兼容策略调整。
 - 2026-06-16: 完成 Zotero relevance 简化方案落位：Better CSL JSON 作为输入，Zotero 作为检索语料，agent 结合 top-k Zotero 证据与作者/课题组质量信号做判断；新增 RR-011/RR-012。
 - 2026-04-09: 准备处理 RR-001 的 iteration_plan 收敛与旧文档清理；假设只删除明确的草稿/垃圾文件，不删除仍有历史参考价值的 dated 文档。

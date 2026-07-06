@@ -28,7 +28,8 @@ def test_source_config_loads_current_enabled_sources() -> None:
     assert configs["portswigger"].tier == "t3-research-blog"
     assert configs["openai-blog"].enabled is True
     assert "cloudflare-security" not in configs
-    assert "trail-of-bits" not in configs
+    assert configs["trail-of-bits"].adapter == "rss"
+    assert configs["assetnote-research"].enabled is True
     assert configs["arxiv"].params["max_results"] == 30
     assert "daily-disabled" in configs["project-zero"].tags
 
@@ -56,8 +57,16 @@ def test_enabled_rss_sources_are_registered_for_crawl() -> None:
 
     rss_slugs = {config.slug for config in enabled_source_configs(source_type=SourceType.BLOGS, adapters={"rss"})}
 
-    assert rss_slugs == {"openai-blog"}
-    assert "openai-blog" in BLOG_CRAWLER_REGISTRY
+    assert rss_slugs == {
+        "openai-blog",
+        "trail-of-bits",
+        "google-security-blog",
+        "github-blog-security",
+        "assetnote-research",
+        "bishopfox-blog",
+    }
+    for slug in rss_slugs:
+        assert slug in BLOG_CRAWLER_REGISTRY
 
 
 def test_arxiv_registry_uses_source_params() -> None:
@@ -153,6 +162,7 @@ def test_resolve_source_slug_accepts_aliases() -> None:
 
     assert resolve_source_slug("project_zero") == "project-zero"
     assert resolve_source_slug("PortSwigger Research") == "portswigger"
+    assert resolve_source_slug("Trail of Bits") == "trail-of-bits"
     assert resolve_source_slug("USENIX_SECURITY") == "usenix-security"
 
 

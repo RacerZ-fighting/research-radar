@@ -77,6 +77,43 @@
 | RR-055 | 安全四大 Paper 恢复与展示 | done | RR-032, RR-036 | Needs human review before merge |
 | RR-056 | 安全四大年份收敛与 Artifact 搜索 | done | RR-055 | Codex can do directly |
 | RR-057 | Dashboard 搜索框 | done | RR-056 | Codex can do directly |
+| RR-058 | Curated research blog RSS expansion | done | RR-057 | Needs human review before merge |
+
+---
+
+## RR-058 Curated research blog RSS expansion
+**Why now**  
+用户指出博客系统的数据源偏少。当前 daily-safe 日常博客源只有少数几个，Industry 的研究博客 lane 容易缺少足够信号；应优先补高信噪比、结构稳定、可长期维护的 RSS/Atom 源，而不是接泛安全新闻站。
+
+**Involved files**
+- `config/sources.json`
+- `tests/test_source_config.py`
+- `docs/CURRENT_STATUS.md`
+- `docs/CODEX_BACKLOG.md`
+- `docs/RUNBOOK.md`
+- `docs/SOURCE_EXPANSION_PLAN.md`
+
+**Do**
+1. 新增 Trail of Bits、Google Online Security Blog、GitHub Blog Security、Assetnote Research、Bishop Fox Blog
+2. 全部复用现有 `RSSFeedCrawler`
+3. 不新增 crawler class
+4. live smoke 确认 feed 可返回有效 entries
+5. GitHub Security Lab feed 当前返回 0 entries，先不纳入默认 source
+6. 更新 source config 测试和运行文档
+
+**Done when**
+- 新 RSS source 在 `config/sources.json` 中 enabled
+- `BLOG_CRAWLER_REGISTRY` 能注册新增 RSS source
+- 单源 crawl 能返回 raw items
+- 测试覆盖新增 RSS source
+
+**Completed (2026-07-06)**  
+- 新增 5 个 curated research blog RSS sources：Trail of Bits、Google Online Security Blog、GitHub Blog Security、Assetnote Research、Bishop Fox Blog。
+- 这些 source 均走现有 `RSSFeedCrawler`，会进入默认 daily-safe blog-like crawl scope。
+- GitHub Security Lab feed 当前可访问但返回 0 entries，暂不接入默认配置。
+
+**Review**  
+Needs human review before merge
 
 ---
 

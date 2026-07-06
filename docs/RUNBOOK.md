@@ -36,7 +36,7 @@ config/sources.json
 - `adapter` 属于当前已支持类型：`crawler` / `rss` / `sitemap` / `webpage`
 - 对 `adapter: "crawler"`，必须已有对应 crawler class
 
-OpenAI / Anthropic / Brutecat / HackTron / Black Hat / DEF CON / BSidesSF 等已进入集中配置。
+OpenAI / Anthropic / Brutecat / HackTron / Trail of Bits / Google Online Security Blog / GitHub Blog Security / Assetnote / Bishop Fox / Black Hat / DEF CON / BSidesSF 等已进入集中配置。
 
 当前会实际采集的 source：
 
@@ -47,7 +47,7 @@ OpenAI / Anthropic / Brutecat / HackTron / Black Hat / DEF CON / BSidesSF 等已
 
 已知 live source 状态：
 
-- 可抓取：OpenAI Blog、Anthropic News、Brutecat、HackTron AI、DEF CON、BSidesSF（AllBSides recording fallback）、PortSwigger
+- 可抓取：OpenAI Blog、Anthropic News、Brutecat、HackTron AI、Trail of Bits、Google Online Security Blog、GitHub Blog Security、Assetnote Research、Bishop Fox Blog、DEF CON、BSidesSF（AllBSides recording fallback）、PortSwigger
 - 官方 parser 已接入：Black Hat Asia 2026、Black Hat USA 2026；crawler 会从官方 schedule shell 发现并抓取 `sessions.json`。当前命令行 requests 可能返回 403，浏览器可见时手动设置 scoped `BLACKHAT_COOKIE` 后再跑；crawler 会用 `curl_cffi` Chrome impersonation fallback。
 - 已移除：RSA Conference / RSAC。此前 RainFocus agenda 噪声偏高，当前不再进入集中 source 配置；历史 RSAC artifacts 已归档出展示面。
 - browser-use crawler 已接入但需要额外 LLM endpoint：Black Hat Europe 当前仍保留 `BrowserUseConferenceCrawler`；当前本地 `OPENAI_BASE_URL` 指向 `/v1/responses` 时不能直接运行，因为 browser-use `ChatOpenAI` 需要 `/v1/chat/completions` 兼容 endpoint。推荐设置 DashScope `BROWSER_USE_BASE_URL`、独立 `BROWSER_USE_API_KEY` 与 `BROWSER_USE_MODEL=qwen-vl-max` 后再跑。
@@ -62,6 +62,11 @@ RSS source 可直接运行：
 
 ```bash
 python -m src.cli crawl --source openai-blog
+python -m src.cli crawl --source trail-of-bits
+python -m src.cli crawl --source google-security-blog
+python -m src.cli crawl --source github-blog-security
+python -m src.cli crawl --source assetnote-research
+python -m src.cli crawl --source bishopfox-blog
 ```
 
 Sitemap source 可直接运行：

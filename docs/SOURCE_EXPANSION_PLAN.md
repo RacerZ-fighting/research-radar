@@ -76,7 +76,8 @@ source stability -> triage stability -> report usefulness -> source expansion
 
 当前已进入集中配置并验证的 T3 source：
 
-- 可抓取：PortSwigger、OpenAI Blog、Anthropic News、Brutecat、HackTron AI、BSidesSF（AllBSides recording fallback）
+- 可抓取：PortSwigger、OpenAI Blog、Anthropic News、Brutecat、HackTron AI、Trail of Bits、Google Online Security Blog、GitHub Blog Security、Assetnote Research、Bishop Fox Blog、BSidesSF（AllBSides recording fallback）
+- 暂不接入：GitHub Security Lab feed 当前可访问但返回 0 entries，先不进入默认 source
 - 专用 parser 可抓取：DEF CON speaker/talk 页面，默认先探测当前年份对应届数；2026-07-03 实测 DEF CON 34 speakers 页为 404，因此当前回退抓取并展示 DEF CON 33 talks
 - 官方 parser 已接入：Black Hat Asia 2026、Black Hat USA 2026；crawler 读取官方 `sessions.json`，requests 403 时使用 scoped `BLACKHAT_COOKIE` + `curl_cffi` Chrome impersonation fallback。Black Hat Asia 2026 live smoke 抓到 53 条有效议题，Black Hat USA 2026 live smoke 抓到 104 条有效议题，均已完成摘要/相关度/评分
 - 已移除：RSA Conference / RSAC。此前官方 RainFocus agenda 可抓取，但 session 噪声偏高，当前不再作为默认 source 维护；历史 artifacts 已归档出展示面
