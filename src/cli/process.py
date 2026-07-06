@@ -647,6 +647,7 @@ def _run_daily_refresh(
     academic_personalization: bool,
     crawl_scope: str = "daily",
     artifact_scope: str = "daily",
+    max_llm_items: int | None = None,
     progress: Callable[[str, int, str], None] | None = None,
 ) -> Path:
     """Run the daily refresh chain and return the generated report path."""
@@ -680,26 +681,31 @@ def _run_daily_refresh(
         target_date=target_date,
         normalized=normalized,
         artifact_scope=artifact_scope,
+        max_items=max_llm_items,
     )
     if artifact_scope == "daily":
         click.echo(f"Selected {len(target_ids)} daily artifact entries for LLM processing")
 
     _emit_progress(progress, "Enriching", 45, "Generating Chinese summaries and tags.")
+    enrichment_progress = _stage_item_progress(progress, "Enriching", 45, 61, "Generating Chinese summaries")
     llm_client = build_llm_client(provider)
     enriched = EnrichmentPipeline(
         session_factory=app.session_factory,
         llm_client=llm_client,
         max_workers=workers,
         request_delay_seconds=request_delay,
+        progress_callback=enrichment_progress,
     ).process(target_ids if artifact_scope == "daily" else None)
     click.echo(f"Enriched {len(enriched)} artifacts")
 
     _emit_progress(progress, "Scoring relevance", 62, "Running LLM relevance filter.")
+    relevance_progress = _stage_item_progress(progress, "Scoring relevance", 62, 73, "Running LLM relevance")
     relevance = LLMRelevancePipeline(
         session_factory=app.session_factory,
         llm_client=llm_client,
         max_workers=workers,
         request_delay_seconds=request_delay,
+        progress_callback=relevance_progress,
     ).process(target_ids if artifact_scope == "daily" else None)
     click.echo(f"LLM relevance scored {len(relevance)} artifacts")
 
@@ -736,6 +742,7 @@ def _daily_refresh_target_ids(
     target_date: date,
     normalized: list[Any],
     artifact_scope: str,
+    max_items: int | None = None,
 ) -> list[int]:
     """Select artifacts that belong to one daily refresh cycle."""
 
@@ -746,7 +753,7 @@ def _daily_refresh_target_ids(
     session = session_factory()
     try:
         artifacts = session.query(Artifact).filter(Artifact.status == ArtifactStatus.ACTIVE).all()
-        selected: list[int] = []
+        selected: list[tuple[int, bool, bool, float]] = []
         for artifact in artifacts:
             if not _is_daily_refresh_artifact(artifact):
                 continue
@@ -754,8 +761,19 @@ def _daily_refresh_target_ids(
             matches_target_date = _artifact_matches_date(artifact, target_date)
             if not is_new_or_updated and not matches_target_date:
                 continue
-            selected.append(artifact.id)
-        return sorted(set(selected))
+            selected.append(
+                (
+                    artifact.id,
+                    matches_target_date,
+                    is_new_or_updated,
+                    _artifact_refresh_timestamp(artifact),
+                )
+            )
+        selected.sort(key=lambda item: (item[1], item[2], item[3], item[0]), reverse=True)
+        ids = [artifact_id for artifact_id, _, _, _ in selected]
+        if max_items is not None and max_items > 0:
+            ids = ids[:max_items]
+        return ids
     finally:
         session.close()
 
@@ -777,6 +795,38 @@ def _artifact_matches_date(artifact: Artifact, target_date: date) -> bool:
     if timestamp is None:
         return False
     return local_date(timestamp) == target_date
+
+
+def _artifact_refresh_timestamp(artifact: Artifact) -> float:
+    """Return a sortable timestamp for daily refresh prioritization."""
+
+    timestamp = artifact.published_at or artifact.created_at
+    if timestamp is None:
+        return 0.0
+    return timestamp.timestamp()
+
+
+def _stage_item_progress(
+    progress: Callable[[str, int, str], None] | None,
+    step: str,
+    start_percent: int,
+    end_percent: int,
+    action: str,
+) -> Callable[[int, int, str], None] | None:
+    """Map per-artifact pipeline progress into dashboard progress percentages."""
+
+    if progress is None:
+        return None
+
+    def emit(completed: int, total: int, title: str) -> None:
+        if total <= 0:
+            percent = start_percent
+        else:
+            span = max(0, end_percent - start_percent)
+            percent = start_percent + int(span * min(max(completed, 0), total) / total)
+        progress(step, percent, f"{action}: {completed}/{total} - {title[:80]}")
+
+    return emit
 
 
 def _run_academic_personalization(

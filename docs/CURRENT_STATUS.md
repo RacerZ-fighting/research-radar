@@ -41,6 +41,7 @@
 - Dashboard 日期控件已支持 Today / 7 days / Custom 三种视图；该范围筛选只作用于日常博客、组织更新和 arXiv，工业会议与 T1 顶会仍保持近期视图
 - `daily-refresh` / `schedule-daily` 的默认 crawl scope 已收敛为 arXiv + daily-enabled blog-like sources，不再默认同步 NDSS / S&P / CCS / USENIX Security 等重型会议论文 crawler；需要时使用 `--crawl-scope all`
 - Dashboard refresh 已有内存态实时进度条，显示 queued / crawl / normalize / enrich / relevance / score / report 等阶段；crawl 阶段会显示当前 source，并在交互式刷新中对单源 fail-fast
+- Dashboard refresh 对一次新增 RSS source 造成的历史 backfill 默认最多处理 30 个 LLM target，并在 enrichment / relevance 阶段显示 item-level `n/total` 进度，避免长时间停留在 45%
 - arXiv daily fetch 已改为按 `cs.CR` / `cs.SE` / `cs.PL` 分 category 小批量抓取并去重，默认最多 30 条，避免组合 OR 查询触发 429 / timeout
 - Project Zero 在当前网络环境下多个入口不稳定，保留 enabled/manual crawl，但通过 `daily-disabled` 标签排除出默认 daily refresh
 - Daily report、Dashboard 和 `daily-refresh` 的日期归属现在按配置本地时区判断，默认 `Asia/Shanghai`；SQLite 中 naive datetime 视为 UTC 后再转本地日期，避免 UTC 晚间 arXiv 被归到前一天
@@ -272,6 +273,7 @@
 - 2026-07-06: 准备处理 RR-057 Dashboard 搜索框；用户澄清搜索框应加在 Dashboard 首页。本次不新增 schema、不改 source、不改 scoring/triage 阈值，只把现有 artifact 搜索能力接入 Dashboard 卡片过滤，并保留日期范围语义。
 - 2026-07-06: 完成 RR-057；Dashboard 现在支持 `q` 搜索框，空搜索保持默认视图，非空搜索会过滤当前日期范围下的 academic / industry 卡片；Today / 7 days / Custom 日期控件会保留搜索词，Clear 会回到当前范围的未搜索视图。
 - 2026-07-06: 准备并完成 RR-058 Curated research blog RSS expansion；用户指出博客系统数据源偏少。本次新增 Trail of Bits、Google Online Security Blog、GitHub Blog Security、Assetnote Research、Bishop Fox Blog 五个 enabled RSS source，全部复用现有 RSS crawler，不新增 schema、不改 scoring/triage 阈值；GitHub Security Lab feed 当前返回 0 entries，暂不纳入默认配置。
+- 2026-07-06: 准备并完成 RR-059 Dashboard refresh backfill cap and progress；用户发现新增 RSS 源后 `Refresh today` 卡在 45%。根因是新增源首次抓取产生大量历史 backfill，Dashboard 单 worker 顺序 LLM enrichment 期间没有 item-level progress。现在 Dashboard refresh 默认最多处理 30 个 LLM target，CLI daily-refresh 默认不限制；enrichment / relevance 阶段会回传 `n/total - title` 进度。
 - 2026-06-16: 准备处理 Zotero 个性化相关度路线的文档落位；假设本次只新增设计文档和 backlog，不涉及 schema 变更、scoring 阈值变更、新 source 接入或 report 文件兼容策略调整。
 - 2026-06-16: 完成 Zotero relevance 简化方案落位：Better CSL JSON 作为输入，Zotero 作为检索语料，agent 结合 top-k Zotero 证据与作者/课题组质量信号做判断；新增 RR-011/RR-012。
 - 2026-04-09: 准备处理 RR-001 的 iteration_plan 收敛与旧文档清理；假设只删除明确的草稿/垃圾文件，不删除仍有历史参考价值的 dated 文档。

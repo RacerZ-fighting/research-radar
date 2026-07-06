@@ -94,6 +94,7 @@ class LLMRelevancePipeline(BasePipeline):
         max_workers: int = 8,
         request_delay_seconds: float = 0.0,
         sleep_fn: Callable[[float], None] = time.sleep,
+        progress_callback: Callable[[int, int, str], None] | None = None,
     ) -> None:
         """Initialize the pipeline dependencies."""
 
@@ -104,6 +105,7 @@ class LLMRelevancePipeline(BasePipeline):
         self.max_workers = max(1, max_workers)
         self.request_delay_seconds = max(0.0, request_delay_seconds)
         self.sleep_fn = sleep_fn
+        self.progress_callback = progress_callback
         self._thread_local = local()
 
     def process(self, input_data: Any) -> list[Artifact]:
@@ -160,6 +162,7 @@ class LLMRelevancePipeline(BasePipeline):
 
         scored_by_order: list[tuple[int, Artifact]] = []
         failed_count = 0
+        completed_count = 0
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             future_to_task = {
@@ -178,9 +181,11 @@ class LLMRelevancePipeline(BasePipeline):
                         task.title,
                         exc,
                     )
-                    continue
-                if artifact is not None:
-                    scored_by_order.append((task.order, artifact))
+                else:
+                    if artifact is not None:
+                        scored_by_order.append((task.order, artifact))
+                completed_count += 1
+                self._emit_progress(completed_count, len(tasks), task.title)
 
         scored_by_order.sort(key=lambda item: item[0])
         return [artifact for _, artifact in scored_by_order], failed_count
@@ -196,6 +201,7 @@ class LLMRelevancePipeline(BasePipeline):
         scored_by_order: list[tuple[int, Artifact]] = []
         failed_count = 0
         for index, task in enumerate(tasks):
+            self._emit_progress(index, len(tasks), task.title)
             if index > 0:
                 self.sleep_fn(self.request_delay_seconds)
             try:
@@ -211,9 +217,16 @@ class LLMRelevancePipeline(BasePipeline):
                 continue
             if artifact is not None:
                 scored_by_order.append((task.order, artifact))
+            self._emit_progress(index + 1, len(tasks), task.title)
 
         scored_by_order.sort(key=lambda item: item[0])
         return [artifact for _, artifact in scored_by_order], failed_count
+
+    def _emit_progress(self, completed: int, total: int, title: str) -> None:
+        """Emit optional per-artifact progress for long-running refresh tasks."""
+
+        if self.progress_callback is not None:
+            self.progress_callback(completed, total, title)
 
     def _score_one(
         self,

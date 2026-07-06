@@ -148,6 +148,8 @@ python -m src.cli daily-refresh --crawl-scope all --provider openai --request-de
 
 `daily-refresh` 的 LLM 分析集合包含目标日期条目，也包含本次新抓取/更新的 daily-scope 条目。这样今天才抓到但站点发布日期属于昨天的博客或组织文章，会立即生成中文摘要；Dashboard / 日报候选加载与展示仍按 `published_at` 优先、`created_at` 兜底的日期归属对应日期页。
 
+Dashboard 的 `Refresh today` 也是调用同一条 daily refresh 链路，但默认加了交互式保护：一次最多处理 `WEB_DAILY_REFRESH_MAX_LLM_ITEMS=30` 个 LLM target，并在 enrichment / relevance 阶段显示当前 `n/total` 进度。新增 RSS source 首次抓取时可能会带入历史 backfill，如果希望一次补全更多条目，可以临时调大该环境变量；CLI `daily-refresh` 默认不受这个上限影响。
+
 如果只想重建本地日报，不抓取也不跑 Zotero / CSRankings / LLM academic personalization：
 
 ```bash

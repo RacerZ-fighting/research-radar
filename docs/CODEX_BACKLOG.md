@@ -78,6 +78,43 @@
 | RR-056 | 安全四大年份收敛与 Artifact 搜索 | done | RR-055 | Codex can do directly |
 | RR-057 | Dashboard 搜索框 | done | RR-056 | Codex can do directly |
 | RR-058 | Curated research blog RSS expansion | done | RR-057 | Needs human review before merge |
+| RR-059 | Dashboard refresh backfill cap and progress | done | RR-058 | Codex can do directly |
+
+---
+
+## RR-059 Dashboard refresh backfill cap and progress
+**Why now**  
+新增多组 RSS blog source 后，用户点击 `Refresh today` 发现进度卡在 45%。实际原因是 daily refresh 会把本次新 normalize 的历史 RSS 条目也纳入 LLM processing，新增源首次抓取会形成较大的 backfill；Dashboard 又只在 enrichment 阶段入口更新一次进度，看起来像卡死。
+
+**Involved files**
+- `src/cli/process.py`
+- `src/web/app.py`
+- `src/pipelines/enrichment.py`
+- `src/pipelines/llm_relevance.py`
+- `tests/cli/test_commands.py`
+- `tests/web/test_web_app.py`
+- `docs/CURRENT_STATUS.md`
+- `docs/CODEX_BACKLOG.md`
+
+**Do**
+1. Dashboard refresh 默认限制一次 LLM target 数量
+2. CLI daily-refresh 默认行为保持不变
+3. Enrichment / LLM relevance 阶段向进度条报告 item-level progress
+4. 新 source backfill 优先处理目标日期和较新的条目
+
+**Done when**
+- `/dashboard/refresh-today` 传入 `max_llm_items=30`
+- Progress message 能显示当前处理进度和 artifact title
+- 测试覆盖 backfill cap 和 Web 参数
+
+**Completed (2026-07-06)**  
+- `_run_daily_refresh` 新增可选 `max_llm_items`，Dashboard 默认 30，CLI 默认不限制。
+- `_daily_refresh_target_ids` 会按目标日期、新/更新状态、时间戳和 id 排序后再 cap。
+- `EnrichmentPipeline` 和 `LLMRelevancePipeline` 支持 `progress_callback`，Dashboard 可显示 `n/total - title`。
+- Regression tests 覆盖 Dashboard 参数和 backfill cap。
+
+**Review**  
+Codex can do directly
 
 ---
 

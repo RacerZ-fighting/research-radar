@@ -855,6 +855,7 @@ def _run_dashboard_daily_refresh(
             academic_personalization=_env_bool("WEB_DAILY_REFRESH_ACADEMIC_PERSONALIZATION", True),
             crawl_scope=os.getenv("WEB_DAILY_REFRESH_CRAWL_SCOPE", "daily"),
             artifact_scope="daily",
+            max_llm_items=_env_int("WEB_DAILY_REFRESH_MAX_LLM_ITEMS", 30, minimum=1),
             progress=status_store.update,
         )
         status_store.finish(f"Daily refresh complete: {report_path}")

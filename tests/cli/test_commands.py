@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 import json
 import re
 import tempfile
@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from src.cli.crawl import _crawl_daily_sources
 from src.cli.main import cli
+from src.cli.process import _daily_refresh_target_ids
 from src.db.session import create_all_tables, create_database_engine, create_session_factory
 from src.models.artifact import Artifact
 from src.models.enums import ArtifactStatus, FeedbackTargetType, FeedbackType, SourceType, ThemeStatus
@@ -324,6 +325,43 @@ class CommandCliTestCase(unittest.TestCase):
             self.assertIn("Generated daily report", result.output)
             self.assertTrue(Path("data/reports/daily/2026-03-11.md").exists())
             self.assertEqual(len(stub_llm.calls), 4)
+
+    def test_daily_refresh_target_ids_can_cap_new_backfill_items(self) -> None:
+        """Dashboard refresh should be able to cap LLM work for newly added feeds."""
+
+        session = self.session_factory()
+        try:
+            repository = ArtifactRepository(session)
+            normalized: list[Artifact] = []
+            for index in range(5):
+                artifact = repository.save(
+                    Artifact(
+                        title=f"Backfill Blog {index}",
+                        authors=[],
+                        year=2026,
+                        source_type=SourceType.BLOGS,
+                        source_tier="t3-research-blog",
+                        source_name="Backfill Blog",
+                        source_url=f"https://example.com/blog/{index}",
+                        abstract="Older article discovered by a newly added feed.",
+                        published_at=datetime(2026, 3, 10, 8, 0, tzinfo=timezone.utc),
+                        status=ArtifactStatus.ACTIVE,
+                    )
+                )
+                normalized.append(artifact)
+        finally:
+            session.close()
+
+        target_ids = _daily_refresh_target_ids(
+            self.session_factory,
+            target_date=date(2026, 3, 11),
+            normalized=normalized,
+            artifact_scope="daily",
+            max_items=2,
+        )
+
+        self.assertEqual(len(target_ids), 2)
+        self.assertEqual(target_ids, [normalized[-1].id, normalized[-2].id])
 
     def test_daily_crawl_scope_excludes_heavy_conference_paper_sources(self) -> None:
         """Daily crawl should include arXiv and blogs, but not T1 conference paper crawlers."""

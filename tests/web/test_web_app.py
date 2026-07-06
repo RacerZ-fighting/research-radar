@@ -102,6 +102,7 @@ class WebConsoleTestCase(unittest.TestCase):
         self.assertFalse(refresh.call_args.kwargs["skip_crawl"])
         self.assertEqual(refresh.call_args.kwargs["crawl_scope"], "daily")
         self.assertEqual(refresh.call_args.kwargs["artifact_scope"], "daily")
+        self.assertEqual(refresh.call_args.kwargs["max_llm_items"], 30)
 
         notice_response = self.client.get(response.headers["location"])
         self.assertEqual(notice_response.status_code, 200)
