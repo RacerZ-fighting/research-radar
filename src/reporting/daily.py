@@ -10,11 +10,16 @@ from sqlalchemy import func, select
 from src.models.artifact import Artifact
 from src.models.enums import ArtifactStatus, SourceType
 from src.reporting.base import BaseReportGenerator
+from src.reporting.relevance_filter import should_display_artifact
 from src.reporting.renderer import format_date, truncate
+from src.timezone import local_date
 
-BLOG_LOOKBACK_DAYS = 3
+RECENT_SIGNAL_DAYS = 7
 BLOG_RECOMMENDATION_LIMIT = 5
-SUMMARY_MAX_LENGTH = 280
+DAILY_SECTION_LIMIT = 8
+SUMMARY_MAX_LENGTH = 900
+ORG_SOURCE_MARKERS = ("openai", "anthropic")
+CONFERENCE_SOURCE_MARKERS = ("black hat", "blackhat", "def con", "defcon", "bsides")
 
 
 class DailyReportGenerator(BaseReportGenerator):
@@ -24,20 +29,50 @@ class DailyReportGenerator(BaseReportGenerator):
         """Generate and write the daily report for one UTC day."""
 
         day_start, day_end = self._day_range(target_date)
-        blog_window_start = day_start - timedelta(days=BLOG_LOOKBACK_DAYS - 1)
+        recent_window_start = day_start - timedelta(days=RECENT_SIGNAL_DAYS - 1)
         read_artifact_ids = self._load_read_artifact_ids()
-        recent_scored_artifacts = self._load_scored_artifacts(blog_window_start, day_end)
-        blog_recommendations = [
+        recent_scored_artifacts = self._load_scored_artifacts(recent_window_start, day_end)
+        display_artifacts = [
             artifact
             for artifact in recent_scored_artifacts
-            if artifact.source_type == SourceType.BLOGS and artifact.id not in read_artifact_ids
+            if artifact.id not in read_artifact_ids and should_display_artifact(artifact)
+        ]
+        blog_recommendations = [
+            artifact
+            for artifact in display_artifacts
+            if artifact.source_type == SourceType.BLOGS
+            and self._matches_day(artifact, target_date)
+            and not self._is_organization_update(artifact)
+            and not self._is_industry_conference(artifact)
         ][:BLOG_RECOMMENDATION_LIMIT]
+        organization_updates = [
+            artifact
+            for artifact in display_artifacts
+            if artifact.source_type == SourceType.BLOGS
+            and self._matches_day(artifact, target_date)
+            and self._is_organization_update(artifact)
+        ][:DAILY_SECTION_LIMIT]
+        arxiv_papers = [
+            artifact
+            for artifact in display_artifacts
+            if artifact.source_type == SourceType.PAPERS
+            and self._is_arxiv_paper(artifact)
+            and self._matches_day(artifact, target_date)
+        ][:DAILY_SECTION_LIMIT]
+        conference_topics = [
+            artifact
+            for artifact in display_artifacts
+            if artifact.source_type == SourceType.BLOGS and self._is_industry_conference(artifact)
+        ][:DAILY_SECTION_LIMIT]
         metadata = self._load_daily_metadata(day_start, day_end)
 
         context = {
             "target_date": target_date,
             "generated_at": self._current_time(),
             "blog_recommendations": blog_recommendations,
+            "organization_updates": organization_updates,
+            "arxiv_papers": arxiv_papers,
+            "conference_topics": conference_topics,
             "paper_count": metadata["paper_count"],
             "paper_sources": metadata["paper_sources"],
             "daily_blog_count": metadata["daily_blog_count"],
@@ -52,6 +87,9 @@ class DailyReportGenerator(BaseReportGenerator):
         target_date = context["target_date"]
         generated_at = context["generated_at"]
         blog_recommendations: list[Artifact] = context["blog_recommendations"]
+        organization_updates: list[Artifact] = context["organization_updates"]
+        arxiv_papers: list[Artifact] = context["arxiv_papers"]
+        conference_topics: list[Artifact] = context["conference_topics"]
         paper_count: int = context["paper_count"]
         paper_sources: list[str] = context["paper_sources"]
         daily_blog_count: int = context["daily_blog_count"]
@@ -67,21 +105,37 @@ class DailyReportGenerator(BaseReportGenerator):
             f"## 今日博客推荐（{len(blog_recommendations)} 篇）",
         ]
 
-        if blog_recommendations:
-            for rank, artifact in enumerate(blog_recommendations, start=1):
-                lines.extend(
-                    [
-                        "",
-                        f"### {rank}. {artifact.title}",
-                        f"- **来源**: {artifact.source_name or 'Unknown'}",
-                        f"- **发布**: {format_date(artifact.published_at, artifact.year)}",
-                        f"- **相关度**: {(artifact.relevance_score or 0.0):.2f}",
-                        f"- **URL**: {artifact.source_url}",
-                        f"- **摘要**: {self._render_summary(artifact)}",
-                    ]
-                )
-        else:
-            lines.extend(["", "暂无符合条件的博客推荐。"])
+        lines.extend(self._render_artifact_list(blog_recommendations, empty_text="暂无符合条件的博客推荐。"))
+
+        lines.extend(
+            [
+                "",
+                "---",
+                "",
+                f"## 今日组织更新（{len(organization_updates)} 篇）",
+            ]
+        )
+        lines.extend(self._render_artifact_list(organization_updates, empty_text="暂无 OpenAI / Anthropic 等组织更新。"))
+
+        lines.extend(
+            [
+                "",
+                "---",
+                "",
+                f"## 今日 arXiv（{len(arxiv_papers)} 篇）",
+            ]
+        )
+        lines.extend(self._render_artifact_list(arxiv_papers, empty_text="暂无符合条件的 arXiv 论文。"))
+
+        lines.extend(
+            [
+                "",
+                "---",
+                "",
+                f"## 近期工业会议 topic（{len(conference_topics)} 条）",
+            ]
+        )
+        lines.extend(self._render_artifact_list(conference_topics, empty_text="暂无近期工业会议 topic。"))
 
         lines.extend(
             [
@@ -102,6 +156,7 @@ class DailyReportGenerator(BaseReportGenerator):
                 "",
                 "## 统计",
                 f"- 今日新增博客数: {daily_blog_count}",
+                f"- 今日 arXiv 展示数: {len(arxiv_papers)}",
                 f"- 数据库总量: {database_total}",
             ]
         )
@@ -171,10 +226,69 @@ class DailyReportGenerator(BaseReportGenerator):
             source_text = f"{source_text} 等"
         return f"> 今日新增 {paper_count} 篇论文（来源：{source_text}）。详见周报。"
 
-    def _render_summary(self, artifact: Artifact) -> str:
-        """Return the preferred summary text for a blog recommendation."""
+    def _render_artifact_list(self, artifacts: list[Artifact], *, empty_text: str) -> list[str]:
+        """Render a numbered artifact list section."""
 
-        summary = artifact.abstract or artifact.summary_l1
+        if not artifacts:
+            return ["", empty_text]
+
+        lines: list[str] = []
+        for rank, artifact in enumerate(artifacts, start=1):
+            lines.extend(
+                [
+                    "",
+                    f"### {rank}. {artifact.title}",
+                    f"- **来源**: {artifact.source_name or 'Unknown'}",
+                    f"- **发布**: {format_date(artifact.published_at, artifact.year)}",
+                    f"- **相关度**: {(artifact.relevance_score or 0.0):.2f}",
+                    f"- **URL**: {artifact.paper_url or artifact.source_url}",
+                    f"- **内容总结**: {self._render_summary(artifact)}",
+                    f"- **关键词**: {self._render_keywords(artifact)}",
+                ]
+            )
+        return lines
+
+    def _render_summary(self, artifact: Artifact) -> str:
+        """Return the preferred summary text for one daily artifact."""
+
+        summary = artifact.summary_l3 or artifact.summary_l1 or artifact.abstract
         if not summary:
             return "暂无摘要。"
         return truncate(summary.strip(), SUMMARY_MAX_LENGTH)
+
+    def _render_keywords(self, artifact: Artifact) -> str:
+        """Return display-ready keyword tags for a blog recommendation."""
+
+        tags = [str(tag).strip() for tag in artifact.tags or [] if str(tag).strip()]
+        if not tags:
+            return "暂无关键词。"
+        return "、".join(tags)
+
+    def _matches_day(self, artifact: Artifact, target_date: date) -> bool:
+        """Return whether the artifact belongs to the target report day."""
+
+        timestamp = artifact.published_at or artifact.created_at
+        return local_date(timestamp) == target_date
+
+    def _is_arxiv_paper(self, artifact: Artifact) -> bool:
+        """Return whether one paper is an arXiv item."""
+
+        return (artifact.source_tier or "").lower() == "t2-arxiv" or "arxiv" in self._source_key(artifact)
+
+    def _is_organization_update(self, artifact: Artifact) -> bool:
+        """Return whether one blog item is an organization update."""
+
+        source_key = self._source_key(artifact)
+        return any(marker in source_key for marker in ORG_SOURCE_MARKERS)
+
+    def _is_industry_conference(self, artifact: Artifact) -> bool:
+        """Return whether one blog item is an industry conference topic."""
+
+        source_key = self._source_key(artifact)
+        tag_keys = {str(tag).strip().lower() for tag in artifact.tags or []}
+        return "industry-conference" in tag_keys or any(marker in source_key for marker in CONFERENCE_SOURCE_MARKERS)
+
+    def _source_key(self, artifact: Artifact) -> str:
+        """Normalize artifact source labels for category checks."""
+
+        return " ".join((artifact.source_name or "").strip().lower().replace("_", "-").split())

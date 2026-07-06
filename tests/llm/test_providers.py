@@ -13,17 +13,23 @@ from src.llm.providers import AnthropicProvider, GeminiProvider, OpenAIProvider
 class FakeResponse:
     """Small response stub that mimics requests.Response."""
 
-    def __init__(self, status_code: int, payload: dict) -> None:
+    def __init__(self, status_code: int, payload: dict, lines: list[str] | None = None) -> None:
         """Store the response status code and JSON payload."""
 
         self.status_code = status_code
         self._payload = payload
         self.text = str(payload)
+        self._lines = lines or []
 
     def json(self) -> dict:
         """Return the configured JSON payload."""
 
         return self._payload
+
+    def iter_lines(self, decode_unicode: bool = False):
+        """Yield configured stream lines."""
+
+        yield from self._lines
 
 
 class FakeSession:
@@ -35,7 +41,15 @@ class FakeSession:
         self.responses = list(responses)
         self.calls: list[dict[str, object]] = []
 
-    def post(self, url: str, *, headers: dict, json: dict, timeout: float) -> FakeResponse:
+    def post(
+        self,
+        url: str,
+        *,
+        headers: dict,
+        json: dict,
+        timeout: float,
+        stream: bool = False,
+    ) -> FakeResponse:
         """Capture one POST call and return the next queued response."""
 
         self.calls.append(
@@ -44,6 +58,7 @@ class FakeSession:
                 "headers": headers,
                 "json": json,
                 "timeout": timeout,
+                "stream": stream,
             }
         )
         if not self.responses:
@@ -73,15 +88,25 @@ class OpenAIProviderTestCase(unittest.TestCase):
                 )
             ]
         )
-        provider = OpenAIProvider(api_key="test-key", base_url="https://api.openai.com/v1/responses", session=session)
+        with patch.dict(
+            os.environ,
+            {
+                "OPENAI_INPUT_AS_LIST": "false",
+                "OPENAI_STREAM": "false",
+                "OPENAI_STORE": "",
+                "OPENAI_OMIT_GENERATION_PARAMS": "false",
+            },
+            clear=False,
+        ):
+            provider = OpenAIProvider(api_key="test-key", base_url="https://api.openai.com/v1/responses", session=session)
 
-        response = provider.generate(
-            prompt="Summarize this paper",
-            model="gpt-4o",
-            max_tokens=256,
-            temperature=0.2,
-            timeout=42.0,
-        )
+            response = provider.generate(
+                prompt="Summarize this paper",
+                model="gpt-4o",
+                max_tokens=256,
+                temperature=0.2,
+                timeout=42.0,
+            )
 
         self.assertEqual(response.text, "openai reply")
         self.assertEqual(response.usage.total_tokens, 19)
@@ -89,6 +114,61 @@ class OpenAIProviderTestCase(unittest.TestCase):
         self.assertEqual(session.calls[0]["json"]["input"], "Summarize this paper")
         self.assertEqual(session.calls[0]["json"]["max_output_tokens"], 256)
         self.assertEqual(session.calls[0]["timeout"], 42.0)
+        self.assertFalse(session.calls[0]["stream"])
+
+    def test_generate_can_parse_configured_responses_api_stream(self) -> None:
+        """The OpenAI provider should support OpenAI-compatible streaming gateways."""
+
+        session = FakeSession(
+            [
+                FakeResponse(
+                    200,
+                    {},
+                    lines=[
+                        b'event: response.output_text.delta',
+                        'data: {"type":"response.output_text.delta","delta":"streamed "}',
+                        'event: response.output_text.delta',
+                        'data: {"type":"response.output_text.delta","delta":"reply"}',
+                        'event: response.output_text.delta',
+                        'data: {"type":"response.output_text.delta","delta":" \\u4e2d\\u6587"}'.encode("utf-8"),
+                        'event: response.completed',
+                        'data: {"type":"response.completed","response":{"model":"gpt-5.4"}}',
+                    ],
+                )
+            ]
+        )
+        with patch.dict(
+            os.environ,
+            {
+                "OPENAI_INPUT_AS_LIST": "true",
+                "OPENAI_STREAM": "true",
+                "OPENAI_STORE": "false",
+                "OPENAI_OMIT_GENERATION_PARAMS": "true",
+            },
+            clear=False,
+        ):
+            provider = OpenAIProvider(
+                api_key="test-key",
+                base_url="https://gateway.example/v1/responses",
+                session=session,
+            )
+
+        response = provider.generate(
+            prompt="Summarize this paper",
+            model="gpt-5.4",
+            max_tokens=256,
+            temperature=0.2,
+            timeout=42.0,
+        )
+
+        self.assertEqual(response.text, "streamed reply 中文")
+        self.assertEqual(response.model, "gpt-5.4")
+        self.assertEqual(session.calls[0]["json"]["input"], [{"role": "user", "content": "Summarize this paper"}])
+        self.assertEqual(session.calls[0]["json"]["store"], False)
+        self.assertEqual(session.calls[0]["json"]["stream"], True)
+        self.assertNotIn("max_output_tokens", session.calls[0]["json"])
+        self.assertNotIn("temperature", session.calls[0]["json"])
+        self.assertTrue(session.calls[0]["stream"])
 
     def test_default_model_map_exposes_all_tiers(self) -> None:
         """The OpenAI provider should provide a model for each tier."""

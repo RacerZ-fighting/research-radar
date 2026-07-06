@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+import hashlib
 import json
 import logging
 from pathlib import Path
 import re
 from threading import local
-from typing import Any
+import time
+from typing import Any, Callable
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -25,19 +27,22 @@ from src.repositories.profile_repository import ProfileRepository
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PROMPT_TEMPLATE = """You are enriching one security research artifact for a personal research radar.
+DEFAULT_PROMPT_TEMPLATE = """你正在为一个安全研究信息收敛系统补全 artifact 的内容理解字段。
 
-Return JSON only with this exact schema:
+请只返回 JSON，不要输出 Markdown、解释或额外文字。格式必须严格如下：
 {
-  "summary_l1": "one concise sentence",
+  "summary_l1": "中文概览摘要",
+  "summary_l3": "中文详细内容总结",
   "tags": ["tag-one", "tag-two", "tag-three"]
 }
 
-Rules:
-- summary_l1 must be one sentence and at most 160 characters.
-- tags must contain 3 to 5 concise lowercase tags.
-- Prefer security-research concepts, attack surfaces, techniques, or systems.
-- Do not include markdown fences or extra commentary.
+要求：
+- summary_l1 必须使用中文，长度 80-160 个中文字符，用一段话说明这篇内容在讲什么。
+- summary_l3 必须使用中文，长度 250-500 个中文字符，面向每日阅读，概括每篇文章的实际内容。
+- summary_l3 应覆盖：核心问题、文章主要论点或发现、涉及的系统/攻击面/方法、为什么值得关注。
+- 如果原文信息不足，明确说明“当前可见信息有限”，但仍要基于标题、来源和摘要提炼可读总结。
+- tags 返回 3-5 个简短标签，使用小写英文短语，空格改为连字符。
+- 不要编造原文没有体现的实验结果、漏洞细节、影响范围或结论。
 
 {{artifact_context}}
 """
@@ -48,6 +53,7 @@ class EnrichmentPayload:
     """Structured enrichment fields returned from the LLM."""
 
     summary_l1: str
+    summary_l3: str
     tags: list[str]
 
 
@@ -79,8 +85,10 @@ class EnrichmentPipeline(BasePipeline):
         session_factory: sessionmaker[Session] | None = None,
         llm_client: LLMClient | Any | None = None,
         prompt_template_path: Path | None = None,
-        enrich_version: str = "v1",
+        enrich_version: str = "v2-cn-detailed",
         max_workers: int = 8,
+        request_delay_seconds: float = 0.0,
+        sleep_fn: Callable[[float], None] = time.sleep,
     ) -> None:
         """Initialize the enrichment pipeline dependencies."""
 
@@ -89,6 +97,8 @@ class EnrichmentPipeline(BasePipeline):
         self.prompt_template_path = prompt_template_path or Path("prompts/summarize_artifact.md")
         self.enrich_version = enrich_version
         self.max_workers = max(1, max_workers)
+        self.request_delay_seconds = max(0.0, request_delay_seconds)
+        self.sleep_fn = sleep_fn
         self._thread_local = local()
 
     def process(self, input_data: Any) -> list[Artifact]:
@@ -140,6 +150,9 @@ class EnrichmentPipeline(BasePipeline):
         if not tasks:
             return [], 0
 
+        if self.request_delay_seconds > 0:
+            return self._run_tasks_sequentially(tasks, template, profile)
+
         enriched_by_order: list[tuple[int, Artifact]] = []
         failed_count = 0
 
@@ -158,6 +171,31 @@ class EnrichmentPipeline(BasePipeline):
                     continue
                 if artifact is not None:
                     enriched_by_order.append((task.order, artifact))
+
+        enriched_by_order.sort(key=lambda item: item[0])
+        return [artifact for _, artifact in enriched_by_order], failed_count
+
+    def _run_tasks_sequentially(
+        self,
+        tasks: list[ArtifactTask],
+        template: str,
+        profile: ProfileContext | None,
+    ) -> tuple[list[Artifact], int]:
+        """Run enrichment tasks one by one with an inter-request delay."""
+
+        enriched_by_order: list[tuple[int, Artifact]] = []
+        failed_count = 0
+        for index, task in enumerate(tasks):
+            if index > 0:
+                self.sleep_fn(self.request_delay_seconds)
+            try:
+                artifact = self._enrich_one(task.artifact_id, template, profile)
+            except Exception as exc:
+                failed_count += 1
+                logger.error("Failed to enrich artifact %s (%s): %s", task.artifact_id, task.title, exc)
+                continue
+            if artifact is not None:
+                enriched_by_order.append((task.order, artifact))
 
         enriched_by_order.sort(key=lambda item: item[0])
         return [artifact for _, artifact in enriched_by_order], failed_count
@@ -181,13 +219,14 @@ class EnrichmentPipeline(BasePipeline):
             response_text = self._get_worker_llm_client().generate(
                 prompt,
                 model_tier=ModelTier.FAST,
-                max_tokens=300,
+                max_tokens=900,
                 temperature=0.2,
-                cache_key=f"enrichment_{self.enrich_version}_{artifact.canonical_id}",
+                cache_key=self._build_cache_key(artifact),
             )
             payload = self._parse_enrichment_response(response_text)
             artifact.summary_l1 = payload.summary_l1
-            artifact.tags = payload.tags
+            artifact.summary_l3 = payload.summary_l3
+            artifact.tags = self._merge_tags(artifact.tags, payload.tags)
             return artifact_repository.save(artifact)
         finally:
             session.close()
@@ -267,8 +306,9 @@ class EnrichmentPipeline(BasePipeline):
         """Return whether the artifact still lacks Phase 1 enrichment fields."""
 
         summary_missing = not (artifact.summary_l1 or "").strip()
+        detailed_summary_missing = not (artifact.summary_l3 or "").strip()
         tags_missing = len([tag for tag in artifact.tags if str(tag).strip()]) == 0
-        return artifact.status == ArtifactStatus.ACTIVE and (summary_missing or tags_missing)
+        return artifact.status == ArtifactStatus.ACTIVE and (summary_missing or detailed_summary_missing or tags_missing)
 
     def _load_prompt_template(self) -> str:
         """Load the prompt template from disk or fall back to the embedded default."""
@@ -286,6 +326,20 @@ class EnrichmentPipeline(BasePipeline):
         if "{{artifact_context}}" in template:
             return template.replace("{{artifact_context}}", artifact_context)
         return f"{template}\n\n{artifact_context}"
+
+    def _build_cache_key(self, artifact: Artifact) -> str:
+        """Build an enrichment cache key that changes when source text changes."""
+
+        content_fingerprint = hashlib.sha256(
+            "\n".join(
+                [
+                    artifact.title or "",
+                    artifact.abstract or "",
+                    artifact.source_url or "",
+                ]
+            ).encode("utf-8")
+        ).hexdigest()[:16]
+        return f"enrichment_{self.enrich_version}_{artifact.canonical_id}_{content_fingerprint}"
 
     def _build_artifact_context(
         self,
@@ -327,13 +381,14 @@ class EnrichmentPipeline(BasePipeline):
             raise PipelineError("LLM enrichment response must be a JSON object")
 
         summary = self._normalize_summary(payload.get("summary_l1"))
+        detailed_summary = self._normalize_detailed_summary(payload.get("summary_l3")) or summary
         tags = self._normalize_tags(payload.get("tags"))
         if not summary:
             raise PipelineError("LLM enrichment response missing summary_l1")
         if not tags:
             raise PipelineError("LLM enrichment response missing tags")
 
-        return EnrichmentPayload(summary_l1=summary, tags=tags)
+        return EnrichmentPayload(summary_l1=summary, summary_l3=detailed_summary, tags=tags)
 
     def _load_payload(self, cleaned: str, response_text: str) -> dict[str, Any]:
         """Load a structured payload, with a relaxed fallback for common JSON drift."""
@@ -404,13 +459,24 @@ class EnrichmentPipeline(BasePipeline):
         return candidate.strip()
 
     def _normalize_summary(self, value: Any) -> str:
-        """Collapse whitespace and return a concise one-line summary."""
+        """Collapse whitespace and return a compact Chinese overview summary."""
 
         if value is None:
             return ""
         summary = " ".join(str(value).split()).strip()
-        if len(summary) > 160:
-            summary = summary[:157].rstrip() + "..."
+        if len(summary) > 240:
+            summary = summary[:237].rstrip() + "..."
+        return summary
+
+    def _normalize_detailed_summary(self, value: Any) -> str:
+        """Return a readable detailed summary while preserving paragraph breaks."""
+
+        if value is None:
+            return ""
+        paragraphs = [" ".join(paragraph.split()).strip() for paragraph in str(value).splitlines()]
+        summary = "\n".join(paragraph for paragraph in paragraphs if paragraph)
+        if len(summary) > 800:
+            summary = summary[:797].rstrip() + "..."
         return summary
 
     def _normalize_tags(self, value: Any) -> list[str]:
@@ -422,10 +488,7 @@ class EnrichmentPipeline(BasePipeline):
         normalized: list[str] = []
         seen: set[str] = set()
         for item in value:
-            tag = str(item).strip().lower()
-            tag = re.sub(r"[^a-z0-9\s\-_]", "", tag)
-            tag = re.sub(r"\s+", "-", tag)
-            tag = re.sub(r"-{2,}", "-", tag).strip("-_")
+            tag = self._normalize_tag(item)
             if not tag or tag in seen:
                 continue
             seen.add(tag)
@@ -433,3 +496,21 @@ class EnrichmentPipeline(BasePipeline):
             if len(normalized) >= 5:
                 break
         return normalized
+
+    def _merge_tags(self, existing_tags: list[str] | None, generated_tags: list[str]) -> list[str]:
+        """Preserve source classification tags while adding generated content tags."""
+
+        merged: list[str] = []
+        for item in [*(existing_tags or []), *generated_tags]:
+            tag = self._normalize_tag(item)
+            if tag and tag not in merged:
+                merged.append(tag)
+        return merged
+
+    def _normalize_tag(self, value: Any) -> str:
+        """Normalize one tag string."""
+
+        tag = str(value).strip().lower()
+        tag = re.sub(r"[^a-z0-9\s\-_]", "", tag)
+        tag = re.sub(r"\s+", "-", tag)
+        return re.sub(r"-{2,}", "-", tag).strip("-_")

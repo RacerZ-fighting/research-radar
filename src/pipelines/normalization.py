@@ -16,6 +16,7 @@ import uuid
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from src.config.sources import infer_source_tier
 from src.crawlers.base import clean_text, split_authors
 from src.db.session import ENGINE, SessionLocal, create_all_tables
 from src.exceptions import PipelineError
@@ -28,17 +29,6 @@ from src.repositories.raw_fetch_repository import RawFetchRepository
 
 logger = logging.getLogger(__name__)
 
-
-SOURCE_TIER_BY_NAME = {
-    "ndss": "t1-conference",
-    "ieee s&p": "t1-conference",
-    "acm ccs": "t1-conference",
-    "usenix security": "t1-conference",
-    "arxiv": "t2-arxiv",
-    "portswigger research": "t3-research-blog",
-    "google project zero": "t3-research-blog",
-    "cloudflare security blog": "t3-research-blog",
-}
 
 # Legacy tier values → new tier values (for data migration)
 _LEGACY_TIER_MAP = {
@@ -489,15 +479,7 @@ class NormalizationPipeline(BasePipeline):
     def _infer_source_tier(self, source_name: str, source_type: SourceType) -> str:
         """Infer a coarse source tier for downstream scoring."""
 
-        source_key = source_name.lower()
-        for candidate, tier in SOURCE_TIER_BY_NAME.items():
-            if candidate in source_key:
-                return tier
-        if source_type == SourceType.PAPERS:
-            return "paper"
-        if source_type == SourceType.BLOGS:
-            return "blog"
-        return "unknown"
+        return infer_source_tier(source_name, source_type)
 
     def _extract_content_url(
         self,

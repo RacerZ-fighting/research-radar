@@ -31,6 +31,20 @@ class RelevanceStrategyTestCase(unittest.TestCase):
 
         self.assertEqual(self.strategy.calculate_score(self._make_artifact(title="Generic Paper"), None), 0.5)
 
+    def test_no_profile_uses_precomputed_llm_relevance(self) -> None:
+        """Missing profile should still use an available LLM relevance score."""
+
+        artifact = self._make_artifact(
+            title="Generic AI Product News",
+            score_breakdown={"llm_relevance_score": 0.2},
+        )
+
+        breakdown = self.strategy.calculate_breakdown(artifact, None)
+
+        self.assertIsNone(breakdown["keyword_match_score"])
+        self.assertEqual(breakdown["llm_relevance_score"], 0.2)
+        self.assertEqual(breakdown["relevance_score"], 0.2)
+
     def test_single_keyword_match(self) -> None:
         """One preferred-topic hit should score 0.4."""
 

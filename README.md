@@ -87,7 +87,7 @@ collect -> normalize -> enrich/filter -> score -> triage
 |------|--------|------|------|------|
 | T1 | `t1-conference` | academic | NDSS, S&P, CCS, USENIX Security | 高权威学术覆盖 |
 | T2 | `t2-arxiv` | academic | arXiv (`cs.CR`, `cs.SE`, `cs.PL`) | 趋势萌芽与新方向 |
-| T3 | `t3-research-blog` | industry | Project Zero, PortSwigger, Cloudflare | 工业需求信号 |
+| T3 | `t3-research-blog` | industry | Project Zero, PortSwigger, OpenAI, Anthropic, Brutecat, HackTron, Black Hat / DEF CON / BSidesSF | 工业需求信号 |
 | T4 | `t4-personal` | industry | 用户指定个人/公司博客 | 快速热点与补充信号 |
 
 ## 当前状态
@@ -106,11 +106,21 @@ conda activate research-radar
 python -m src.cli profile seed-v2
 python -m src.cli migrate-tiers
 
-# 日常运行：生成日报
-python -m src.cli run --skip-crawl --provider anthropic --report-type daily
+# 日常运行：刷新当天消息并生成日报
+# 默认只 crawl arXiv + daily-enabled blog-like sources，不跑 NDSS/S&P/CCS/USENIX 等重型会议 crawler
+python -m src.cli daily-refresh --provider openai --request-delay 5
+
+# 如需同步安全四大等重型会议论文源，显式打开 all scope
+python -m src.cli daily-refresh --crawl-scope all --provider openai --request-delay 5
+
+# 每天定时刷新当天消息
+python -m src.cli schedule-daily --time 00:10 --provider openai --request-delay 5
 
 # 每周完整链路：跑 intelligence analysis，并输出 landscape
 python -m src.cli run --skip-crawl --full --provider anthropic
+
+# 本地 Web Console：查看结果、管理 source、触发小范围任务
+python -m src.cli web
 
 # 独立命令
 python -m src.cli deep-analyze --provider anthropic
@@ -122,6 +132,8 @@ python -m src.cli synthesize --provider anthropic
 python -m src.cli report --type weekly
 python -m src.cli report --type landscape
 ```
+
+本地 Web Console 默认运行在 `http://127.0.0.1:8000`，复用现有 SQLite、`config/sources.json` 和 pipeline。它用于日常查看和轻量管理，不替代 CLI 自动化链路。
 
 ## 文档入口
 

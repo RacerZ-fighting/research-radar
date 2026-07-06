@@ -27,10 +27,12 @@ class RelevanceStrategy(BaseScoringStrategy):
         """Return keyword-match details and the merged relevance score."""
 
         if profile is None:
+            llm_relevance_score = self._calculate_llm_relevance_score(artifact)
+            relevance_score = llm_relevance_score if llm_relevance_score is not None else NEUTRAL_RELEVANCE_SCORE
             return {
-                "keyword_match_score": NEUTRAL_RELEVANCE_SCORE,
-                "llm_relevance_score": None,
-                "relevance_score": NEUTRAL_RELEVANCE_SCORE,
+                "keyword_match_score": None,
+                "llm_relevance_score": self._clamp_score(llm_relevance_score) if llm_relevance_score is not None else None,
+                "relevance_score": self._clamp_score(relevance_score),
             }
 
         # When preferred_topics is empty (v2 broad profile), skip keyword match
@@ -48,7 +50,7 @@ class RelevanceStrategy(BaseScoringStrategy):
             profile.avoided_topics, self._build_search_corpus(artifact)
         ) if profile.avoided_topics else 0
 
-        llm_relevance_score = self._calculate_llm_relevance_score(artifact, profile)
+        llm_relevance_score = self._calculate_llm_relevance_score(artifact)
         relevance_score = self._merge_relevance_scores(keyword_match_score, llm_relevance_score)
         if avoided_match_count:
             relevance_score *= TOPIC_AVOIDANCE_PENALTY
@@ -102,10 +104,9 @@ class RelevanceStrategy(BaseScoringStrategy):
             return 0.4
         return NO_MATCH_FLOOR_SCORE
 
-    def _calculate_llm_relevance_score(self, artifact: Artifact, profile: Profile) -> float | None:
+    def _calculate_llm_relevance_score(self, artifact: Artifact) -> float | None:
         """Return one precomputed LLM relevance score when available."""
 
-        del profile
         if not artifact.score_breakdown:
             return None
         llm_score = artifact.score_breakdown.get("llm_relevance_score")

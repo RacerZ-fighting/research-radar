@@ -13,7 +13,7 @@
 |------|--------|---------|------|------|-----------|------|
 | T1 | `t1-conference` | 学术轨 | 顶会论文 | NDSS, S&P, CCS, USENIX Security | 1.0 | 经过同行评审，最高权威性 |
 | T2 | `t2-arxiv` | 学术轨 | arXiv 预印本 | cs.CR, cs.SE, cs.PL | 0.5 | 最新研究，未经评审，能看到趋势萌芽 |
-| T3 | `t3-research-blog` | 工业轨 | 知名安全研究博客 | Project Zero, PortSwigger, Cloudflare | 0.7 | 机构背书，代表工业需求信号 |
+| T3 | `t3-research-blog` | 工业轨 | 知名安全研究博客 / 工业会议 topic | Project Zero, PortSwigger, OpenAI, Anthropic, Brutecat, HackTron, Black Hat, DEF CON, BSidesSF | 0.7 | 机构背书，代表工业需求信号 |
 | T4 | `t4-personal` | 工业轨 | 个人/公司博客 | 用户指定 | 待设计 | 快速热点，质量参差不齐 |
 
 **当前实现**：T1（已有爬虫）+ T3 博客（已有爬虫，已 live 验证，55 条入库）
@@ -79,7 +79,7 @@
 **API**：arXiv Atom API (`https://export.arxiv.org/api/query`)
 **分类**：cs.CR (Cryptography and Security) + cs.SE (Software Engineering) + cs.PL (Programming Languages)
 **时间范围**：最近 12 个月（趋势检测需要足够的时间跨度）
-**预计数据量**：~5000-8000 篇/年（经域过滤后进入分析的约 1000-2000 篇）
+**预计数据量**：长期全量约 5000-8000 篇/年；当前每日默认只抓最近 30 条作为前沿入口，由 `config/sources.json` 的 `params.max_results` 控制。
 **Rate limit**：每请求间隔 3 秒（arXiv 政策要求）
 **增量爬取**：追踪上次爬取时间，每日增量获取
 **Tier 值**：`t2-arxiv`（学术轨，authority=0.5）
@@ -90,28 +90,49 @@ ArxivCrawler 设计要点：
 - 解析 Atom XML 响应
 - 提取：title, authors, abstract, published_date, arxiv_id, categories, pdf_url
 - arxiv_id 作为 external_id 用于去重
-- 分页处理（每页 100 条）
+- 分 category 小批量查询，避免组合 OR 查询触发 429 / timeout
+- 分页处理（每页最多 100 条）
+- `categories` / `max_results` 从集中 source config 读取
 - 注册到 `src/crawlers/registry.py`
 
 ---
 
 ## 3. Blogs (T3)
 
-### 3.1 已实现爬虫（已 live 验证，55 条入库）
+### 3.1 当前集中配置的 T3 source
 
-| 博客 | URL | 说明 | source_tier |
-|------|-----|------|-------------|
-| PortSwigger Research | https://portswigger.net/research | Web 安全研究 | t3-research-blog |
-| Google Project Zero | https://googleprojectzero.blogspot.com/ | 漏洞研究 | t3-research-blog |
-| Cloudflare Security Blog | https://blog.cloudflare.com/tag/security/ | 安全+基础设施 | t3-research-blog |
+运行时 source metadata 以 `config/sources.json` 为准。当前默认 crawl 会运行 `enabled=true` 且 adapter 已支持的 source：`crawler` / `rss` / `sitemap` / `webpage`。
 
-**v2 定位变更**：博客不再与论文混排。博客属于工业轨，其核心价值是**需求信号**（工业界遇到了什么问题），通过 `SignalExtractionPipeline` 提取结构化需求信号，用于与学术覆盖交叉比对（空白检测）。
+| Source | URL | Adapter | Enabled | 说明 | source_tier |
+|------|-----|---------|---------|------|-------------|
+| PortSwigger Research | https://portswigger.net/research/articles | crawler | true | Web 安全研究 | t3-research-blog |
+| Google Project Zero | https://projectzero.google/ | crawler | true | 漏洞研究；当前标记 `daily-disabled`，不进入默认日刷 | t3-research-blog |
+| OpenAI Blog | https://openai.com/news/ | rss | true | 前沿 AI / AI 安全信号 | t3-research-blog |
+| Anthropic News | https://www.anthropic.com/news | sitemap | true | 前沿 AI / AI 安全信号 | t3-research-blog |
+| Brutecat Articles | https://brutecat.com/articles | webpage | true | 漏洞研究 / 技术文章 | t3-research-blog |
+| HackTron AI | https://www.hacktron.ai/ | webpage | true | AI 安全 / 工业信号 | t3-research-blog |
+| Black Hat Asia | https://www.blackhat.com/asia-26/ | crawler | true | 官方 `sessions.json` schedule parser；requests 403 时使用 scoped `BLACKHAT_COOKIE` + `curl_cffi` Chrome impersonation fallback | t3-research-blog |
+| Black Hat USA | https://www.blackhat.com/us-26/ | crawler | true | 官方 `sessions.json` schedule parser；requests 403 时使用 scoped `BLACKHAT_COOKIE` + `curl_cffi` Chrome impersonation fallback | t3-research-blog |
+| Black Hat Europe | https://www.blackhat.com/eu-26/ | crawler | true | 2026 schedule 当前未发布；暂保留 browser-use crawler，发布后优先复用 Black Hat 官方 parser | t3-research-blog |
+| DEF CON | https://defcon.org/ | crawler | true | 工业会议 speaker/talk 页面；先探测当前年会，未发布时回退上一届 | t3-research-blog |
+| BSidesSF | https://bsidessf.org/ | crawler | true | 工业会议 talk recordings；AllBSides fallback，非完整 Sched agenda | t3-research-blog |
+
+当前 live smoke 状态：
+
+- 可抓取：OpenAI Blog、Anthropic News、Brutecat、HackTron AI、BSidesSF AllBSides fallback、PortSwigger
+- 专用 parser 可抓取：DEF CON speaker/talk 页面；2026-07-03 实测 DEF CON 34 speakers 页为 404，当前回退 DEF CON 33
+- 官方 schedule parser 已接入：Black Hat Asia 2026、Black Hat USA 2026；crawler 从官方 schedule shell 发现 `sessions.json` 并解析议题数据，requests 403 时使用 scoped `BLACKHAT_COOKIE` + `curl_cffi` Chrome impersonation fallback。Black Hat Asia live smoke 抓到 53 条有效议题，Black Hat USA live smoke 抓到 104 条有效议题，均已完成摘要/相关度/评分
+- 已移除：RSA Conference / RSAC。此前官方 RainFocus agenda live smoke 抓到 160 条 session，但噪声偏高，当前不再保留为集中 source；历史 artifacts 已归档出展示面
+- browser-use crawler 已接入：Black Hat Europe。Black Hat Europe 2026 schedule 当前未发布
+- 保留手动调试：Project Zero。当前环境下官方域名和 Blogspot feed 多个入口不稳定，已通过 `daily-disabled` 排除出默认 daily refresh
+- requests 直接抓取仍被 403 阻断：Black Hat Asia / USA 官方 schedule 在无 scoped cookie 时可能返回 403，但 scoped `cf_clearance` + `curl_cffi` 已验证可用；Black Hat Europe 2026 schedule 尚未发布；BSidesSF Sched 仍需 browser-use、官方导出或其它稳定策略；BSidesSF 已用 AllBSides recording fallback 覆盖部分 talk
+
+**v2 定位变更**：T3 source 不再与论文混排。它们属于工业轨，其核心价值是**需求信号**（工业界遇到了什么问题），通过 `SignalExtractionPipeline` 提取结构化需求信号，用于与学术覆盖交叉比对（空白检测）。
 
 ### 3.2 潜在新增博客源
 
 | 博客 | URL | 说明 | 优先级 |
 |------|-----|------|--------|
-| Trail of Bits | https://blog.trailofbits.com/ | 程序分析、fuzzing | 高 |
 | Phrack | http://www.phrack.org/ | 经典黑客杂志 | 中 |
 | The Daily Swig | https://portswigger.net/daily-swig | 安全新闻 | 中 |
 

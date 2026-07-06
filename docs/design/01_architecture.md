@@ -88,7 +88,7 @@ research-radar/
 ### 4.3 Enrich (P2.3)
 调用 LLM 增强 artifact：
 1. 读取未增强的 active artifact
-2. 逐条调用 LLM (FAST tier) 生成 summary_l1 + tags
+2. 逐条调用 LLM (FAST tier) 生成中文 `summary_l1`、中文 `summary_l3` 和 tags
 3. 写回 Artifact
 
 ### 4.4 LLM Relevance (P7.2 → v4)
@@ -162,7 +162,7 @@ crawl → normalize → enrich → llm-relevance(v4) → score(分轨)
 - Report（Markdown 文件）
 
 ### Recomputable
-- summary_l1 / tags（LLM 输出，可带 cache 重算）
+- summary_l1 / summary_l3 / tags（LLM 输出，可带 cache 重算）
 - summary_l2（论文 L2 深度分析 / 博客需求信号，可重算）
 - scores（评分，可重算）
 - Theme / ResearchGap / CandidateDirection（可重新生成，但 CORE Theme 需保留）

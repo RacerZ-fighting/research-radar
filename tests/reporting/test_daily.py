@@ -108,32 +108,236 @@ class DailyReportGeneratorTestCase(unittest.TestCase):
         content = self.generator.generate(self.target_date).read_text(encoding="utf-8")
         blog_section = content.split("## 漏洞速报", maxsplit=1)[0]
 
-        self.assertIn("## 今日博客推荐（2 篇）", content)
+        self.assertIn("## 今日博客推荐（1 篇）", content)
         self.assertIn("Recent Blog", blog_section)
-        self.assertIn("Earlier Blog", blog_section)
-        self.assertLess(blog_section.index("Recent Blog"), blog_section.index("Earlier Blog"))
+        self.assertNotIn("Earlier Blog", blog_section)
         self.assertNotIn("Read Blog", content)
         self.assertNotIn("Stale Blog", content)
         self.assertNotIn("Fresh Paper", content)
 
-    def test_daily_uses_summary_l1_when_abstract_missing(self) -> None:
-        """Blog summaries should fall back to summary_l1 when needed."""
+    def test_daily_uses_published_date_for_delayed_blog_fetches(self) -> None:
+        """Daily reports should include late-fetched blogs on their publication day."""
+
+        delayed_blog = make_artifact(
+            title="Delayed Anthropic Blog",
+            source_type=SourceType.BLOGS,
+            source_name="Anthropic News",
+            final_score=0.91,
+            relevance_score=0.83,
+            published_at=datetime(2026, 3, 10, 8, 0, tzinfo=timezone.utc),
+            created_at=datetime(2026, 3, 11, 2, 0, tzinfo=timezone.utc),
+            summary_l3="这是一条延迟抓取但属于目标日期的中文摘要。",
+        )
+
+        self._save_artifacts(delayed_blog)
+
+        content = self.generator.generate(self.target_date).read_text(encoding="utf-8")
+
+        self.assertIn("Delayed Anthropic Blog", content)
+        self.assertIn("这是一条延迟抓取但属于目标日期的中文摘要。", content)
+
+    def test_daily_hides_analyzed_low_relevance_blogs(self) -> None:
+        """Daily reports should hide artifacts once LLM relevance marks them as low relevance."""
 
         self._save_artifacts(
             make_artifact(
-                title="Summary Fallback Blog",
+                title="Relevant Security Blog",
                 source_type=SourceType.BLOGS,
                 source_name="Project Zero",
-                abstract=None,
-                summary_l1="Summary L1 fallback text.",
+                final_score=0.80,
+                relevance_score=0.60,
+                score_breakdown={"llm_relevance_score": 0.6, "llm_relevance_version": "v4"},
+            ),
+            make_artifact(
+                title="Generic AI Product News",
+                source_type=SourceType.BLOGS,
+                source_name="OpenAI Blog",
+                final_score=0.90,
+                relevance_score=0.20,
+                score_breakdown={"llm_relevance_score": 0.2, "llm_relevance_version": "v4"},
+            ),
+        )
+
+        content = self.generator.generate(self.target_date).read_text(encoding="utf-8")
+
+        self.assertIn("Relevant Security Blog", content)
+        self.assertNotIn("Generic AI Product News", content)
+
+    def test_daily_splits_org_arxiv_and_conference_sections(self) -> None:
+        """Daily report should mirror dashboard date semantics for org, arXiv, and conference lanes."""
+
+        previous_day = datetime(2026, 3, 9, 11, 0, tzinfo=timezone.utc)
+        self._save_artifacts(
+            make_artifact(
+                title="OpenAI Security Update",
+                source_type=SourceType.BLOGS,
+                source_name="OpenAI Blog",
+                final_score=0.88,
+                relevance_score=0.80,
+            ),
+            make_artifact(
+                title="Previous Anthropic Update",
+                source_type=SourceType.BLOGS,
+                source_name="Anthropic News",
+                final_score=0.87,
+                relevance_score=0.79,
+                created_at=previous_day,
+            ),
+            make_artifact(
+                title="Daily arXiv Paper",
+                source_type=SourceType.PAPERS,
+                source_name="arXiv",
+                source_tier="t2-arxiv",
+                final_score=0.86,
+                relevance_score=0.78,
+            ),
+            make_artifact(
+                title="Previous arXiv Paper",
+                source_type=SourceType.PAPERS,
+                source_name="arXiv",
+                source_tier="t2-arxiv",
+                final_score=0.85,
+                relevance_score=0.77,
+                created_at=previous_day,
+            ),
+            make_artifact(
+                title="Older DEF CON Topic",
+                source_type=SourceType.BLOGS,
+                source_name="DEF CON",
+                final_score=0.84,
+                relevance_score=0.76,
+                created_at=previous_day,
+                summary_l3="这是一条已经完成中文摘要的 DEF CON 议题。",
+                tags=["industry-conference"],
+            ),
+        )
+
+        content = self.generator.generate(self.target_date).read_text(encoding="utf-8")
+        org_section = content.split("## 今日组织更新", maxsplit=1)[1].split("## 今日 arXiv", maxsplit=1)[0]
+        arxiv_section = content.split("## 今日 arXiv", maxsplit=1)[1].split("## 近期工业会议 topic", maxsplit=1)[0]
+        conference_section = content.split("## 近期工业会议 topic", maxsplit=1)[1].split("## 漏洞速报", maxsplit=1)[0]
+
+        self.assertIn("OpenAI Security Update", org_section)
+        self.assertNotIn("Previous Anthropic Update", org_section)
+        self.assertIn("Daily arXiv Paper", arxiv_section)
+        self.assertNotIn("Previous arXiv Paper", arxiv_section)
+        self.assertIn("Older DEF CON Topic", conference_section)
+
+    def test_daily_uses_configured_local_day_for_arxiv(self) -> None:
+        """UTC evening arXiv papers should belong to the next Asia/Shanghai daily report."""
+
+        self._save_artifacts(
+            make_artifact(
+                title="Local Day arXiv Paper",
+                source_type=SourceType.PAPERS,
+                source_name="arXiv",
+                source_tier="t2-arxiv",
+                final_score=0.86,
+                relevance_score=0.78,
+                created_at=datetime(2026, 7, 2, 11, 0, tzinfo=timezone.utc),
+                published_at=datetime(2026, 7, 1, 17, 46, tzinfo=timezone.utc),
+            )
+        )
+
+        content = self.generator.generate(date(2026, 7, 2)).read_text(encoding="utf-8")
+
+        arxiv_section = content.split("## 今日 arXiv", maxsplit=1)[1].split("## 近期工业会议 topic", maxsplit=1)[0]
+        self.assertIn("Local Day arXiv Paper", arxiv_section)
+
+    def test_daily_prefers_detailed_summary_over_l1_and_raw_abstract(self) -> None:
+        """Blog summaries should prefer AI-generated summary_l3 over shorter fallbacks."""
+
+        self._save_artifacts(
+            make_artifact(
+                title="AI Summary Blog",
+                source_type=SourceType.BLOGS,
+                source_name="Project Zero",
+                abstract="Raw crawler excerpt.",
+                summary_l1="Short AI generated summary.",
+                summary_l3="更完整的中文内容总结，说明这篇文章的核心问题、主要发现、涉及的系统以及为什么值得关注。",
                 relevance_score=0.81,
             )
         )
 
         content = self.generator.generate(self.target_date).read_text(encoding="utf-8")
 
-        self.assertIn("Summary L1 fallback text.", content)
+        self.assertIn("- **内容总结**: 更完整的中文内容总结，说明这篇文章的核心问题、主要发现、涉及的系统以及为什么值得关注。", content)
+        self.assertNotIn("Short AI generated summary.", content)
+        self.assertNotIn("Raw crawler excerpt.", content)
         self.assertNotIn("暂无摘要。", content)
+
+    def test_daily_falls_back_to_summary_l1_when_detailed_summary_missing(self) -> None:
+        """Existing short summaries should still render when summary_l3 has not been generated."""
+
+        self._save_artifacts(
+            make_artifact(
+                title="L1 Summary Blog",
+                source_type=SourceType.BLOGS,
+                source_name="Project Zero",
+                abstract="Raw crawler excerpt.",
+                summary_l1="AI generated summary.",
+                summary_l3=None,
+                relevance_score=0.81,
+            )
+        )
+
+        content = self.generator.generate(self.target_date).read_text(encoding="utf-8")
+
+        self.assertIn("- **内容总结**: AI generated summary.", content)
+        self.assertNotIn("Raw crawler excerpt.", content)
+
+    def test_daily_falls_back_to_abstract_when_summary_l1_missing(self) -> None:
+        """Raw excerpts should still be used when AI enrichment has not run."""
+
+        self._save_artifacts(
+            make_artifact(
+                title="Raw Summary Blog",
+                source_type=SourceType.BLOGS,
+                source_name="Project Zero",
+                abstract="Raw crawler excerpt.",
+                summary_l1=None,
+                relevance_score=0.81,
+            )
+        )
+
+        content = self.generator.generate(self.target_date).read_text(encoding="utf-8")
+
+        self.assertIn("- **内容总结**: Raw crawler excerpt.", content)
+        self.assertNotIn("暂无摘要。", content)
+
+    def test_daily_renders_keywords_for_blog_recommendations(self) -> None:
+        """Daily recommendations should expose AI-generated tags as keywords."""
+
+        self._save_artifacts(
+            make_artifact(
+                title="Tagged Blog",
+                source_type=SourceType.BLOGS,
+                source_name="Project Zero",
+                tags=["web-security", "agent-security", "vulnerability-research"],
+                relevance_score=0.81,
+            )
+        )
+
+        content = self.generator.generate(self.target_date).read_text(encoding="utf-8")
+
+        self.assertIn("- **关键词**: web-security、agent-security、vulnerability-research", content)
+
+    def test_daily_renders_keyword_placeholder_when_tags_missing(self) -> None:
+        """Daily recommendations should make missing keywords explicit."""
+
+        self._save_artifacts(
+            make_artifact(
+                title="Untagged Blog",
+                source_type=SourceType.BLOGS,
+                source_name="Project Zero",
+                tags=[],
+                relevance_score=0.81,
+            )
+        )
+
+        content = self.generator.generate(self.target_date).read_text(encoding="utf-8")
+
+        self.assertIn("- **关键词**: 暂无关键词。", content)
 
     def test_daily_limits_blog_recommendations_to_five(self) -> None:
         """Daily blog recommendations should cap the visible list at five."""

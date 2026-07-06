@@ -15,14 +15,17 @@ source stability -> triage stability -> report usefulness -> source expansion
 
 ### Academic
 - T1 conferences
-- T2 arXiv
+- T2 arXiv（当前通过 `config/sources.json` 控制 categories/max_results，默认每日最多 30 条，并按 category 分开查询）
 
 ### Industry
 - T3 curated research blogs
+- T3 industry conference topic sources
 
 ### 未完成
 - advisories
 - T4 personal sources
+- Black Hat Asia / USA scoped cookie 更新/轮换方式确认；Black Hat Europe 2026 schedule 发布监控
+- BSidesSF Sched 的稳定替代抓取策略
 
 ## 3. source 准入规则
 
@@ -70,6 +73,18 @@ source stability -> triage stability -> report usefulness -> source expansion
 - 泛安全新闻站
 - 高频营销博客
 - 没有稳定结构的个人站
+
+当前已进入集中配置并验证的 T3 source：
+
+- 可抓取：PortSwigger、OpenAI Blog、Anthropic News、Brutecat、HackTron AI、BSidesSF（AllBSides recording fallback）
+- 专用 parser 可抓取：DEF CON speaker/talk 页面，默认先探测当前年份对应届数；2026-07-03 实测 DEF CON 34 speakers 页为 404，因此当前回退抓取并展示 DEF CON 33 talks
+- 官方 parser 已接入：Black Hat Asia 2026、Black Hat USA 2026；crawler 读取官方 `sessions.json`，requests 403 时使用 scoped `BLACKHAT_COOKIE` + `curl_cffi` Chrome impersonation fallback。Black Hat Asia 2026 live smoke 抓到 53 条有效议题，Black Hat USA 2026 live smoke 抓到 104 条有效议题，均已完成摘要/相关度/评分
+- 已移除：RSA Conference / RSAC。此前官方 RainFocus agenda 可抓取，但 session 噪声偏高，当前不再作为默认 source 维护；历史 artifacts 已归档出展示面
+- browser-use crawler 已接入：Black Hat Europe。Black Hat Europe 2026 schedule 当前未发布
+- 保留手动调试：Project Zero。当前环境下官方域名和 Blogspot feed 多个入口不稳定，已通过 `daily-disabled` 排除出默认 daily refresh
+- requests 直接抓取仍被 403 阻断：Black Hat Asia / USA 官方 schedule 在无 scoped cookie 时可能返回 403，但 scoped `cf_clearance` + `curl_cffi` 已验证可用；Black Hat Europe 2026 schedule 尚未发布；BSidesSF Sched 仍需 browser-use、官方导出或其它稳定策略
+
+Black Hat Asia / USA 后续需要确认 scoped cookie 更新/轮换方式是否可长期维护；Black Hat Europe 等官方 schedule 发布后应优先复用 `blackhat-schedule`，不要回到第三方镜像。BSidesSF 当前 fallback 只能覆盖已发布录制 talk，不等同于完整 Sched agenda。
 
 ### Phase 3：T4 personal sources
 目的：

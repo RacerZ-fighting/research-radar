@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlencode
 
 from src.crawlers.base import PaperCrawler, clean_text
 from src.exceptions import CrawlerError
@@ -53,14 +55,47 @@ class ArxivCrawler(PaperCrawler):
         """
 
         target_years = set(self.normalize_years(years)) if years else set()
-        category_query = " OR ".join(f"cat:{cat}" for cat in self.categories)
-        query = f"({category_query})"
+        if not self.categories:
+            return []
+
+        if len(self.categories) == 1:
+            return self._fetch_query(f"cat:{self.categories[0]}", target_years, self.max_results)
+
+        per_category_limit = max(1, math.ceil(self.max_results / len(self.categories)))
+        all_papers: list[dict[str, Any]] = []
+        seen_keys: set[str] = set()
+
+        for index, category in enumerate(self.categories):
+            if index > 0:
+                time.sleep(REQUEST_INTERVAL_SECONDS)
+
+            category_papers = self._fetch_query(f"cat:{category}", target_years, per_category_limit)
+            for paper in category_papers:
+                key = self._dedupe_key(paper)
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                all_papers.append(paper)
+                if len(all_papers) >= self.max_results:
+                    logger.info("Fetched %s papers from arXiv (%s)", len(all_papers), ", ".join(self.categories))
+                    return all_papers
+
+        logger.info("Fetched %s papers from arXiv (%s)", len(all_papers), ", ".join(self.categories))
+        return all_papers
+
+    def _fetch_query(
+        self,
+        query: str,
+        target_years: set[int],
+        max_results: int,
+    ) -> list[dict[str, Any]]:
+        """Fetch one arXiv search query in paginated batches."""
 
         all_papers: list[dict[str, Any]] = []
         start = 0
 
-        while start < self.max_results:
-            batch_size = min(MAX_RESULTS_PER_PAGE, self.max_results - start)
+        while start < max_results:
+            batch_size = min(MAX_RESULTS_PER_PAGE, max_results - start)
             params = {
                 "search_query": query,
                 "start": str(start),
@@ -69,13 +104,13 @@ class ArxivCrawler(PaperCrawler):
                 "sortOrder": "descending",
             }
 
-            url = f"{ARXIV_API_URL}?{'&'.join(f'{k}={v}' for k, v in params.items())}"
-            logger.info("Fetching arXiv batch: start=%s, max_results=%s", start, batch_size)
+            url = f"{ARXIV_API_URL}?{urlencode(params)}"
+            logger.info("Fetching arXiv batch: query=%s, start=%s, max_results=%s", query, start, batch_size)
 
             try:
                 response_text = self.fetch_url(url)
             except CrawlerError:
-                logger.error("Failed to fetch arXiv batch at start=%s", start)
+                logger.error("Failed to fetch arXiv batch for query=%s at start=%s", query, start)
                 break
 
             papers = self._parse_atom_response(response_text, target_years)
@@ -86,11 +121,19 @@ class ArxivCrawler(PaperCrawler):
             start += batch_size
 
             # Respect arXiv rate limit
-            if start < self.max_results:
+            if start < max_results:
                 time.sleep(REQUEST_INTERVAL_SECONDS)
 
-        logger.info("Fetched %s papers from arXiv (%s)", len(all_papers), ", ".join(self.categories))
         return all_papers
+
+    def _dedupe_key(self, paper: dict[str, Any]) -> str:
+        """Return a stable best-effort key for duplicate papers across categories."""
+
+        for field_name in ("arxiv_id", "url", "title"):
+            value = paper.get(field_name)
+            if value:
+                return str(value).strip().lower()
+        return repr(sorted(paper.items()))
 
     def _parse_atom_response(
         self,

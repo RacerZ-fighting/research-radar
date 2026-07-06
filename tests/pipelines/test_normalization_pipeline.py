@@ -183,6 +183,7 @@ class NormalizationPipelineTestCase(unittest.TestCase):
             self.assertEqual(len(saved), 1)
             artifact = saved[0]
             self.assertEqual(artifact.source_type, SourceType.BLOGS)
+            self.assertEqual(artifact.source_tier, "t3-research-blog")
             self.assertEqual(
                 artifact.source_url,
                 "https://portswigger.net/research/http-desync-attacks-revisited",

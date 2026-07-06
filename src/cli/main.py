@@ -15,6 +15,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.db.session import create_all_tables, create_database_engine, create_session_factory, get_database_url
+from src.timezone import app_today
 
 load_dotenv(override=True)
 
@@ -50,7 +51,7 @@ def parse_date_option(raw_value: str | None) -> date:
     """Parse an ISO date string or return today if omitted."""
 
     if raw_value is None:
-        return date.today()
+        return app_today()
     try:
         return date.fromisoformat(raw_value)
     except ValueError as exc:
@@ -103,7 +104,11 @@ from src.cli.feedback import feedback_command  # noqa: E402
 from src.cli.maintenance import cleanup_ccs_command  # noqa: E402
 from src.cli.profile import profile_command  # noqa: E402
 from src.cli.process import (  # noqa: E402
+    academic_filter_command,
+    academic_judge_command,
+    academic_labels_command,
     cluster_command,
+    daily_refresh_command,
     deep_analyze_command,
     detect_gaps_command,
     enrich_command,
@@ -112,17 +117,24 @@ from src.cli.process import (  # noqa: E402
     migrate_tiers_command,
     normalize_command,
     run_command,
+    schedule_daily_command,
     score_command,
     synthesize_command,
     trend_command,
 )
 from src.cli.report import report_command  # noqa: E402
+from src.cli.web import web_command  # noqa: E402
 
 cli.add_command(crawl_command)
 cli.add_command(cleanup_ccs_command)
 cli.add_command(normalize_command)
 cli.add_command(enrich_command)
 cli.add_command(llm_relevance_command)
+cli.add_command(academic_filter_command)
+cli.add_command(academic_judge_command)
+cli.add_command(academic_labels_command)
+cli.add_command(daily_refresh_command)
+cli.add_command(schedule_daily_command)
 cli.add_command(deep_analyze_command)
 cli.add_command(cluster_command)
 cli.add_command(extract_signals_command)
@@ -135,3 +147,4 @@ cli.add_command(report_command)
 cli.add_command(feedback_command)
 cli.add_command(profile_command)
 cli.add_command(run_command)
+cli.add_command(web_command)

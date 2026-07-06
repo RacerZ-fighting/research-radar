@@ -1,0 +1,320 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "slug": "ndss",
+      "name": "NDSS",
+      "source_type": "papers",
+      "tier": "t1-conference",
+      "track": "academic",
+      "adapter": "crawler",
+      "crawler": "ndss",
+      "enabled": true,
+      "aliases": ["ndss"],
+      "urls": {
+        "homepage": "https://www.ndss-symposium.org/"
+      },
+      "tags": ["security-conference"]
+    },
+    {
+      "slug": "sp",
+      "name": "IEEE S&P",
+      "source_type": "papers",
+      "tier": "t1-conference",
+      "track": "academic",
+      "adapter": "crawler",
+      "crawler": "sp",
+      "enabled": true,
+      "aliases": ["ieee s&p", "ieee symposium on security and privacy"],
+      "urls": {
+        "homepage": "https://www.ieee-security.org/TC/SP-Index.html"
+      },
+      "tags": ["security-conference"]
+    },
+    {
+      "slug": "ccs",
+      "name": "ACM CCS",
+      "source_type": "papers",
+      "tier": "t1-conference",
+      "track": "academic",
+      "adapter": "crawler",
+      "crawler": "ccs",
+      "enabled": true,
+      "aliases": ["acm ccs", "ccs"],
+      "urls": {
+        "homepage": "https://www.sigsac.org/ccs.html"
+      },
+      "tags": ["security-conference"]
+    },
+    {
+      "slug": "usenix-security",
+      "name": "USENIX Security",
+      "source_type": "papers",
+      "tier": "t1-conference",
+      "track": "academic",
+      "adapter": "crawler",
+      "crawler": "usenix-security",
+      "enabled": true,
+      "aliases": ["usenix security", "usenix_security"],
+      "urls": {
+        "homepage": "https://www.usenix.org/conferences/byname/108"
+      },
+      "tags": ["security-conference"]
+    },
+    {
+      "slug": "arxiv",
+      "name": "arXiv",
+      "source_type": "papers",
+      "tier": "t2-arxiv",
+      "track": "academic",
+      "adapter": "crawler",
+      "crawler": "arxiv",
+      "enabled": true,
+      "aliases": ["arxiv"],
+      "urls": {
+        "api": "https://export.arxiv.org/api/query"
+      },
+      "params": {
+        "categories": ["cs.CR", "cs.SE", "cs.PL"],
+        "max_results": 30
+      },
+      "tags": ["preprint"]
+    },
+    {
+      "slug": "portswigger",
+      "name": "PortSwigger Research",
+      "source_type": "blogs",
+      "tier": "t3-research-blog",
+      "track": "industry",
+      "adapter": "crawler",
+      "crawler": "portswigger",
+      "enabled": true,
+      "aliases": ["portswigger research", "portswigger_research"],
+      "urls": {
+        "listing": "https://portswigger.net/research/articles",
+        "rss": "https://portswigger.net/research/rss"
+      },
+      "tags": ["web-security", "research-blog"]
+    },
+    {
+      "slug": "project-zero",
+      "name": "Google Project Zero",
+      "source_type": "blogs",
+      "tier": "t3-research-blog",
+      "track": "industry",
+      "adapter": "crawler",
+      "crawler": "project-zero",
+      "enabled": true,
+      "aliases": ["google project zero", "project zero", "project_zero"],
+      "urls": {
+        "listing": "https://projectzero.google/"
+      },
+      "tags": ["vulnerability-research", "research-blog", "daily-disabled"]
+    },
+    {
+      "slug": "openai-blog",
+      "name": "OpenAI Blog",
+      "source_type": "blogs",
+      "tier": "t3-research-blog",
+      "track": "industry",
+      "adapter": "rss",
+      "enabled": true,
+      "aliases": ["openai blog", "openai"],
+      "urls": {
+        "homepage": "https://openai.com/news/",
+        "rss": "https://openai.com/news/rss.xml"
+      },
+      "tags": ["frontier-ai", "ai-security"]
+    },
+    {
+      "slug": "anthropic-news",
+      "name": "Anthropic News",
+      "source_type": "blogs",
+      "tier": "t3-research-blog",
+      "track": "industry",
+      "adapter": "sitemap",
+      "enabled": true,
+      "aliases": ["anthropic news", "anthropic"],
+      "urls": {
+        "homepage": "https://www.anthropic.com/news",
+        "sitemap": "https://www.anthropic.com/sitemap.xml"
+      },
+      "filters": {
+        "include_url_prefixes": ["https://www.anthropic.com/news/"]
+      },
+      "tags": ["frontier-ai", "ai-security"]
+    },
+    {
+      "slug": "brutecat",
+      "name": "Brutecat Articles",
+      "source_type": "blogs",
+      "tier": "t3-research-blog",
+      "track": "industry",
+      "adapter": "webpage",
+      "enabled": true,
+      "aliases": ["brutecat", "brutecat articles"],
+      "urls": {
+        "listing": "https://brutecat.com/articles"
+      },
+      "filters": {
+        "include_url_prefixes": ["https://brutecat.com/articles/"],
+        "exclude_url_contains": ["/rss.xml"]
+      },
+      "tags": ["vulnerability-research", "research-blog"]
+    },
+    {
+      "slug": "hacktron-ai",
+      "name": "HackTron AI",
+      "source_type": "blogs",
+      "tier": "t3-research-blog",
+      "track": "industry",
+      "adapter": "webpage",
+      "enabled": true,
+      "aliases": ["hacktron", "hacktron ai", "hacktron.ai"],
+      "urls": {
+        "homepage": "https://www.hacktron.ai/",
+        "listing": "https://www.hacktron.ai/blog"
+      },
+      "filters": {
+        "include_url_prefixes": ["https://www.hacktron.ai/blog/"]
+      },
+      "tags": ["ai-security", "research-blog"]
+    },
+    {
+      "slug": "blackhat-usa",
+      "name": "Black Hat USA",
+      "source_type": "blogs",
+      "tier": "t3-research-blog",
+      "track": "industry",
+      "adapter": "crawler",
+      "crawler": "blackhat-schedule",
+      "enabled": true,
+      "aliases": ["blackhat usa", "black hat usa", "black hat us"],
+      "urls": {
+        "homepage": "https://www.blackhat.com/us-26/",
+        "schedule": "https://www.blackhat.com/us-26/briefings/schedule/index.html",
+        "events": "https://www.blackhat.com/html/archives.html"
+      },
+      "filters": {
+        "include_url_contains": ["/us-", "/html/archives.html"],
+        "exclude_url_contains": ["mailto:"]
+      },
+      "params": {
+        "event_label": "Black Hat USA 2026",
+        "target_urls": ["https://www.blackhat.com/us-26/briefings/schedule/index.html"],
+        "cookie_env": "BLACKHAT_COOKIE",
+        "impersonate": "chrome136",
+        "max_results": 120
+      },
+      "tags": ["industry-conference", "security-conference", "talks"]
+    },
+    {
+      "slug": "blackhat-asia",
+      "name": "Black Hat Asia",
+      "source_type": "blogs",
+      "tier": "t3-research-blog",
+      "track": "industry",
+      "adapter": "crawler",
+      "crawler": "blackhat-schedule",
+      "enabled": true,
+      "aliases": ["blackhat asia", "black hat asia"],
+      "urls": {
+        "homepage": "https://www.blackhat.com/asia-26/",
+        "schedule": "https://blackhat.com/asia-26/briefings/schedule/index.html",
+        "events": "https://www.blackhat.com/html/archives.html"
+      },
+      "filters": {
+        "include_url_contains": ["/asia-", "/html/archives.html"],
+        "exclude_url_contains": ["mailto:"]
+      },
+      "params": {
+        "event_label": "Black Hat Asia 2026",
+        "target_urls": ["https://blackhat.com/asia-26/briefings/schedule/index.html"],
+        "schedule_dates": {
+          "THURSDAY": "2026-04-23",
+          "FRIDAY": "2026-04-24"
+        },
+        "cookie_env": "BLACKHAT_COOKIE",
+        "impersonate": "chrome136",
+        "max_results": 80
+      },
+      "tags": ["industry-conference", "security-conference", "talks"]
+    },
+    {
+      "slug": "blackhat-europe",
+      "name": "Black Hat Europe",
+      "source_type": "blogs",
+      "tier": "t3-research-blog",
+      "track": "industry",
+      "adapter": "crawler",
+      "crawler": "browser-use-conference",
+      "enabled": true,
+      "aliases": ["blackhat europe", "black hat europe"],
+      "urls": {
+        "homepage": "https://www.blackhat.com/eu-26/",
+        "schedule": "https://www.blackhat.com/eu-26/briefings/schedule/",
+        "events": "https://www.blackhat.com/html/archives.html"
+      },
+      "filters": {
+        "include_url_contains": ["/eu-", "/html/archives.html"],
+        "exclude_url_contains": ["mailto:"]
+      },
+      "params": {
+        "event_label": "Black Hat Europe 2026",
+        "target_urls": [
+          "https://www.blackhat.com/eu-26/briefings/schedule/",
+          "https://www.blackhat.com/eu-26/"
+        ],
+        "max_results": 20
+      },
+      "tags": ["industry-conference", "security-conference", "talks"]
+    },
+    {
+      "slug": "defcon",
+      "name": "DEF CON",
+      "source_type": "blogs",
+      "tier": "t3-research-blog",
+      "track": "industry",
+      "adapter": "crawler",
+      "crawler": "defcon",
+      "enabled": true,
+      "aliases": ["defcon", "def con"],
+      "urls": {
+        "homepage": "https://defcon.org/",
+        "archives": "https://defcon.org/html/links/dc-archives.html",
+        "speakers": "https://defcon.org/html/defcon-33/dc-33-speakers.html"
+      },
+      "filters": {
+        "include_url_contains": ["/dc-archives/dc-"],
+        "exclude_url_contains": ["/html/links/html/"]
+      },
+      "tags": ["industry-conference", "security-conference", "talks"]
+    },
+    {
+      "slug": "bsidessf",
+      "name": "BSidesSF",
+      "source_type": "blogs",
+      "tier": "t3-research-blog",
+      "track": "industry",
+      "adapter": "crawler",
+      "crawler": "allbsides",
+      "enabled": true,
+      "aliases": ["bsidessf", "bsides sf", "bsides san francisco"],
+      "urls": {
+        "homepage": "https://bsidessf.org/",
+        "schedule": "https://bsidessf.org/schedule",
+        "fallback_api": "https://api.allbsides.com/v1/talks?organizer=bsidessf&year=2026"
+      },
+      "filters": {
+        "include_url_prefixes": ["https://bsidessf.org/news/", "https://bsidessf.org/schedule/"]
+      },
+      "params": {
+        "organizer_slug": "bsidessf",
+        "event_year": 2026,
+        "event_slug": "bsidessf-2026",
+        "max_results": 20
+      },
+      "tags": ["industry-conference", "security-conference", "talks"]
+    }
+  ]
+}

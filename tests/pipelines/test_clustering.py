@@ -139,7 +139,7 @@ class ClusteringPipelineTestCase(unittest.TestCase):
         # With <= 15 unique labels, merge is skipped, only 1 LLM call (batch)
         self.assertEqual(len(llm_client.calls), 1)
         self.assertEqual(llm_client.calls[0]["model_tier"], ModelTier.STANDARD)
-        self.assertEqual(llm_client.calls[0]["max_tokens"], 4000)
+        self.assertEqual(llm_client.calls[0]["max_tokens"], 6000)
 
     def test_clustering_skips_low_relevance(self) -> None:
         """Low-relevance papers should not enter the clustering input."""

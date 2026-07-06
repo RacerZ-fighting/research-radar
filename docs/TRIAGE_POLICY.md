@@ -84,6 +84,8 @@ triage 的目标不是“更细的打分”，而是直接减少用户的管理�
 - 与当前 theme / gap / direction 强相关
 - 不与本周期已选 paper 高度重复
 
+arXiv 默认宁缺毋滥：仅靠 topical match 不应进入 `read_original`。在质量证据和 Zotero 相似证据尚未完整接入前，Daily/Web 只隐藏最低相关档；真正升级到高优先级仍需要 RR-012 的作者/课题组/历史发表等质量证据。
+
 ### 4.2 `detailed_summary`
 满足以下条件之一即可进入：
 - 学术价值中高，但不值得立刻读原文

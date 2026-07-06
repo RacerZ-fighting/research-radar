@@ -94,10 +94,10 @@ class LLMRelevancePipelineTestCase(unittest.TestCase):
 
         self.assertEqual(len(scored), 1)
         self.assertEqual(scored[0].score_breakdown["llm_relevance_score"], 0.8)
-        self.assertEqual(scored[0].score_breakdown["llm_relevance_version"], "v4")
+        self.assertEqual(scored[0].score_breakdown["llm_relevance_version"], "v5-security-filter")
         self.assertEqual(len(llm_client.calls), 1)
         self.assertEqual(llm_client.calls[0]["model_tier"], ModelTier.STANDARD)
-        self.assertTrue(str(llm_client.calls[0]["cache_key"]).startswith("relevance_v4_"))
+        self.assertTrue(str(llm_client.calls[0]["cache_key"]).startswith("relevance_v5-security-filter_"))
 
     def test_pipeline_skips_already_scored(self) -> None:
         """Artifacts with existing llm_relevance_score should not be sent again."""
@@ -111,7 +111,7 @@ class LLMRelevancePipelineTestCase(unittest.TestCase):
         (self.workspace / "prompt.md").write_text("{{title}}", encoding="utf-8")
         self._save_artifact(
             title="Already Scored",
-            score_breakdown={"llm_relevance_score": 0.8, "llm_relevance_version": "v4"},
+            score_breakdown={"llm_relevance_score": 0.8, "llm_relevance_version": "v5-security-filter"},
         )
 
         scored = pipeline.process(None)
@@ -138,7 +138,7 @@ class LLMRelevancePipelineTestCase(unittest.TestCase):
 
         self.assertEqual(len(scored), 1)
         self.assertEqual(scored[0].score_breakdown["llm_relevance_score"], 1.0)
-        self.assertEqual(scored[0].score_breakdown["llm_relevance_version"], "v4")
+        self.assertEqual(scored[0].score_breakdown["llm_relevance_version"], "v5-security-filter")
         self.assertEqual(len(llm_client.calls), 1)
 
     def test_pipeline_continues_on_single_failure(self) -> None:
@@ -254,6 +254,52 @@ class LLMRelevancePipelineTestCase(unittest.TestCase):
             self.assertEqual(missing_count, 1)
         finally:
             session.close()
+
+    def test_request_delay_forces_sequential_processing(self) -> None:
+        """Configured request delay should serialize relevance calls for rate-limited providers."""
+
+        llm_client = StubLLMClient(
+            [
+                '{"score": 3, "reason": "Related."}',
+                '{"score": 3, "reason": "Related."}',
+                '{"score": 3, "reason": "Related."}',
+            ]
+        )
+        sleeps: list[float] = []
+        pipeline = LLMRelevancePipeline(
+            session_factory=self.session_factory,
+            llm_client=llm_client,
+            prompt_template_path=self.workspace / "prompt.md",
+            max_workers=3,
+            request_delay_seconds=2.5,
+            sleep_fn=sleeps.append,
+        )
+        (self.workspace / "prompt.md").write_text("{{title}}", encoding="utf-8")
+        artifact_ids = [self._save_artifact(title=f"Delayed Artifact {index}").id for index in range(3)]
+
+        scored = pipeline.process(artifact_ids)
+
+        self.assertEqual(len(scored), 3)
+        self.assertEqual(sleeps, [2.5, 2.5])
+        self.assertEqual(len(llm_client.calls), 3)
+
+    def test_cache_key_changes_when_evaluated_text_changes(self) -> None:
+        """Relevance cache keys should not reuse stale scores after content changes."""
+
+        pipeline = LLMRelevancePipeline(
+            session_factory=self.session_factory,
+            llm_client=StubLLMClient([]),
+            prompt_template_path=self.workspace / "prompt.md",
+        )
+        before = self._save_artifact(title="Changing Article", abstract="Old text.")
+        after = self._save_artifact(title="Changing Article Copy", abstract="New article body text.")
+        after.canonical_id = before.canonical_id
+
+        before_key = pipeline._build_cache_key(before)
+        after_key = pipeline._build_cache_key(after)
+
+        self.assertNotEqual(before_key, after_key)
+        self.assertTrue(before_key.startswith("relevance_v5-security-filter_"))
 
     def test_parse_score_response_extracts_fenced_json_from_preface(self) -> None:
         """Parser should recover a JSON score from explanatory wrapper text."""

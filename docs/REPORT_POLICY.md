@@ -17,9 +17,10 @@
 目标：5–10 分钟。
 回答问题：
 - 今天有什么值得注意？
-- 哪些要亲读？
-- 哪些只看一句话？
-- 哪些应该 delegate？
+- 短期：每条值得注意内容的 AI 摘要和关键词是什么？
+- 长期：哪些要亲读？
+- 长期：哪些只看一句话？
+- 长期：哪些应该 delegate？
 
 ### 2.2 Weekly
 目标：30–60 分钟。
@@ -55,6 +56,69 @@
 7. 报告优先输出可执行下一步，而不是堆信息
 
 ## 4. Daily 报告结构
+
+当前短期结构：
+
+1. Header / meta
+2. 今日博客推荐（目标日期当天普通研究博客）
+   - 来源
+   - 发布日期
+   - 相关度
+   - URL
+   - 内容总结（优先 `summary_l3`，再回退 `summary_l1` / raw abstract）
+   - 关键词（来自 `tags`）
+3. 今日组织更新（目标日期当天 OpenAI / Anthropic 等组织发布）
+   - 来源
+   - 发布日期
+   - 相关度
+   - URL
+   - 内容总结
+   - 关键词
+4. 今日 arXiv（目标日期当天通过展示过滤的 T2 arXiv paper）
+   - 来源
+   - 发布日期
+   - 相关度
+   - URL
+   - 内容总结（优先中文 `summary_l3` / `summary_l1`）
+   - 关键词 / focus labels
+5. 近期工业会议 topic（不按目标日期硬过滤）
+6. Advisories 占位
+7. 论文动态（T1 顶会新增提示，不列完整标题）
+8. Today stats
+
+Daily 与 Web Dashboard 的日期语义保持一致：
+- blogs / organizations / arXiv 按 `target_date` 展示
+- T1 conference paper 与 industry conference topic 作为低频更新提示，保留近期视图，不因当天无新增而完全空掉
+
+当前 Daily/Web 展示会应用共享 relevance filter：
+- 已有 `llm_relevance_score` 且 `< 0.4` 的 artifact 默认不展示
+- 没有 LLM relevance 的旧 artifact 暂不隐藏，避免未分析内容被误删
+- 对已经运行过 `academic-judge` 的 academic artifact，LLM 判定不相关或 `academic_relevance_score` 低于当前门槛的论文默认不展示
+- 对尚未运行 `academic-judge` 但已经运行过 `academic-filter` 的 academic artifact，默认不展示；相关度最终由 LLM 基于 top-k Zotero evidence 判断
+- T1 conference paper 必须有 `academic_relevance_judged=true` 才进入 Daily/Web 展示，避免安全四大 raw corpus 直接刷屏
+- 对已经运行过 `academic-filter` 的 arXiv artifact，`academic_quality_score` 低于当前阈值的论文默认不展示
+- `0.4` 视为弱相关/边缘信号，先保留给用户判断
+
+Academic 个性化过滤的派生证据存放在 `Artifact.score_breakdown`，包括：
+- `zotero_similarity`
+- `zotero_matches`
+- `academic_relevance_judged`
+- `academic_relevance_score`
+- `academic_relevance_reason`
+- `academic_quality_score`
+- `academic_quality_signals`
+- `academic_focus_labels`
+
+Web Console 的 paper 卡片会把这些证据压缩成可扫读 chips：
+- AI focus：来自 `academic_focus_labels`，优先展示具体研究问题/对象/方法
+- LLM relevance：页面显示 `相关度 0.xx`，tooltip 放中文裁判理由
+- 知名度/课题组证据：来自 `academic_quality_signals.matched_faculty`
+
+如果尚未运行 `academic-labels`，paper 卡片可退回到少量非泛化 `Artifact.tags` 或 Zotero 证据；一旦有 AI focus labels，就不再展示 `Computer Science - ...` 这类泛 topic。
+
+Paper 卡片摘要优先使用中文 `summary_l3`，让卡片仍以内容摘要为主；如果缺少中文详细摘要，则回退中文 `summary_l1`。如果 paper 暂无中文 summary，则用 `academic_focus_labels` 合成一句中文研究焦点摘要，而不是直接展示英文 abstract。Industry/blog 卡片同样优先使用 `summary_l3` 作为详细内容总结。Zotero match evidence 中每条相关 Zotero item 的 `topics` 最多保留 3 个。
+
+未评估的旧 T2 arXiv artifact 暂不按 Zotero / CSRankings 隐藏，避免在缺少 Zotero 配置时误删展示结果；T1 conference paper 例外，必须先完成 LLM academic judgment。
 
 建议固定结构：
 

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+import hashlib
 import json
 import logging
 from pathlib import Path
 import re
 from threading import local
-from typing import Any
+import time
+from typing import Any, Callable
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -88,8 +90,10 @@ class LLMRelevancePipeline(BasePipeline):
         session_factory: sessionmaker[Session] | None = None,
         llm_client: LLMClient | Any | None = None,
         prompt_template_path: Path | None = None,
-        relevance_version: str = "v4",
+        relevance_version: str = "v5-security-filter",
         max_workers: int = 8,
+        request_delay_seconds: float = 0.0,
+        sleep_fn: Callable[[float], None] = time.sleep,
     ) -> None:
         """Initialize the pipeline dependencies."""
 
@@ -98,6 +102,8 @@ class LLMRelevancePipeline(BasePipeline):
         self.prompt_template_path = prompt_template_path or Path("prompts/relevance_score.md")
         self.relevance_version = relevance_version
         self.max_workers = max(1, max_workers)
+        self.request_delay_seconds = max(0.0, request_delay_seconds)
+        self.sleep_fn = sleep_fn
         self._thread_local = local()
 
     def process(self, input_data: Any) -> list[Artifact]:
@@ -149,6 +155,9 @@ class LLMRelevancePipeline(BasePipeline):
         if not tasks:
             return [], 0
 
+        if self.request_delay_seconds > 0:
+            return self._run_tasks_sequentially(tasks, template, profile)
+
         scored_by_order: list[tuple[int, Artifact]] = []
         failed_count = 0
 
@@ -176,6 +185,36 @@ class LLMRelevancePipeline(BasePipeline):
         scored_by_order.sort(key=lambda item: item[0])
         return [artifact for _, artifact in scored_by_order], failed_count
 
+    def _run_tasks_sequentially(
+        self,
+        tasks: list[ArtifactTask],
+        template: str,
+        profile: ProfileContext | None,
+    ) -> tuple[list[Artifact], int]:
+        """Run relevance tasks one by one with an inter-request delay."""
+
+        scored_by_order: list[tuple[int, Artifact]] = []
+        failed_count = 0
+        for index, task in enumerate(tasks):
+            if index > 0:
+                self.sleep_fn(self.request_delay_seconds)
+            try:
+                artifact = self._score_one(task.artifact_id, template, profile)
+            except Exception as exc:
+                failed_count += 1
+                logger.error(
+                    "Failed to compute LLM relevance for artifact %s (%s): %s",
+                    task.artifact_id,
+                    task.title,
+                    exc,
+                )
+                continue
+            if artifact is not None:
+                scored_by_order.append((task.order, artifact))
+
+        scored_by_order.sort(key=lambda item: item[0])
+        return [artifact for _, artifact in scored_by_order], failed_count
+
     def _score_one(
         self,
         artifact_id: int,
@@ -197,7 +236,7 @@ class LLMRelevancePipeline(BasePipeline):
                 model_tier=ModelTier.STANDARD,
                 max_tokens=150,
                 temperature=0.1,
-                cache_key=f"relevance_{self.relevance_version}_{artifact.canonical_id}",
+                cache_key=self._build_cache_key(artifact),
             )
             raw_score = self._parse_score_response(response_text)
             breakdown = dict(artifact.score_breakdown or {})
@@ -345,6 +384,21 @@ class LLMRelevancePipeline(BasePipeline):
         for placeholder, value in replacements.items():
             prompt = prompt.replace(placeholder, value)
         return prompt
+
+    def _build_cache_key(self, artifact: Artifact) -> str:
+        """Build a relevance cache key that changes when evaluated text changes."""
+
+        content_fingerprint = hashlib.sha256(
+            "\n".join(
+                [
+                    artifact.title or "",
+                    artifact.summary_l1 or "",
+                    artifact.abstract or "",
+                    " ".join(artifact.tags or []),
+                ]
+            ).encode("utf-8")
+        ).hexdigest()[:16]
+        return f"relevance_{self.relevance_version}_{artifact.canonical_id}_{content_fingerprint}"
 
     def _parse_score_response(self, response_text: str) -> int:
         """Parse one LLM JSON response and return the raw 1-5 score."""

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.models.artifact import Artifact
@@ -42,14 +42,15 @@ class ArtifactRepository(BaseRepository[Artifact]):
         end: datetime,
         status: ArtifactStatus = ArtifactStatus.ACTIVE,
     ) -> list[Artifact]:
-        """Return scored artifacts whose created_at falls within [start, end)."""
+        """Return scored artifacts whose display date falls within [start, end)."""
 
+        display_timestamp = func.coalesce(Artifact.published_at, Artifact.created_at)
         statement = (
             select(Artifact)
-            .where(Artifact.created_at >= start)
-            .where(Artifact.created_at < end)
+            .where(display_timestamp >= start)
+            .where(display_timestamp < end)
             .where(Artifact.status == status)
             .where(Artifact.final_score.is_not(None))
-            .order_by(Artifact.final_score.desc(), Artifact.created_at.desc(), Artifact.id.desc())
+            .order_by(Artifact.final_score.desc(), display_timestamp.desc(), Artifact.id.desc())
         )
         return list(self.session.scalars(statement))

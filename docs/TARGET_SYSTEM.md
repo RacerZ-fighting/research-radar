@@ -52,10 +52,11 @@ collect -> normalize -> enrich/filter -> score -> triage
 为了最小改动，优先复用现有字段，不做大 schema 改造。
 
 ### `Artifact.summary_l1`
-保留当前含义：
-- 一句话摘要
+当前含义：
+- 中文概览摘要
 - 面向快速浏览
-- 可直接用于日报的 one-line bucket
+- 比旧版一句话更完整，但仍保持短摘要属性
+- 可作为 `summary_l3` 缺失时的日报/Web fallback
 
 ### `Artifact.summary_l2`
 保留当前“结构化深度分析”语义：
@@ -64,10 +65,10 @@ collect -> normalize -> enrich/filter -> score -> triage
 - 不把它改成普通长摘要字段
 
 ### `Artifact.summary_l3`
-作为新增的“详细消费层”承载位：
-- human-readable detailed summary
+作为“详细消费层”承载位：
+- 中文 human-readable detailed summary
 - 或 delegate briefing seed
-- 默认不要求所有 artifact 都填
+- 对新 enrichment 默认填充，旧 artifact 可按需补齐
 - 优先只对进入 Detailed / Delegate bucket 的条目生成
 
 ### `Artifact.score_breakdown`

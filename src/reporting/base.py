@@ -17,6 +17,7 @@ from src.models.artifact import Artifact
 from src.models.enums import ArtifactStatus, FeedbackTargetType, FeedbackType
 from src.models.feedback import FeedbackEvent
 from src.repositories.artifact_repository import ArtifactRepository
+from src.timezone import local_day_utc_range
 
 logger = logging.getLogger(__name__)
 
@@ -56,10 +57,9 @@ class BaseReportGenerator(ABC):
         return datetime.now(timezone.utc)
 
     def _day_range(self, target_date: date) -> tuple[datetime, datetime]:
-        """Return the UTC range covering one calendar day."""
+        """Return the UTC range covering one configured local calendar day."""
 
-        start = datetime.combine(target_date, time.min, tzinfo=timezone.utc)
-        return start, start + timedelta(days=1)
+        return local_day_utc_range(target_date)
 
     def _week_range(self, target_date: date) -> tuple[datetime, datetime]:
         """Return the Monday-to-Monday UTC range for the ISO week."""
@@ -100,10 +100,11 @@ class BaseReportGenerator(ABC):
     ) -> int:
         """Count artifacts in the window that are not yet scored."""
 
+        display_timestamp = func.coalesce(Artifact.published_at, Artifact.created_at)
         statement = (
             select(func.count(Artifact.id))
-            .where(Artifact.created_at >= start)
-            .where(Artifact.created_at < end)
+            .where(display_timestamp >= start)
+            .where(display_timestamp < end)
             .where(Artifact.status == status)
             .where(Artifact.final_score.is_(None))
         )

@@ -82,7 +82,9 @@ class EnrichmentPipelineTestCase(unittest.TestCase):
 
         llm_client = StubLLMClient(
             [
-                '{"summary_l1": "A concise one-line summary.", "tags": ["browser-security", "side-channel"]}'
+                '{"summary_l1": "这篇文章概述了浏览器隔离机制中的安全问题，并说明相关攻击面为什么值得持续关注。", '
+                '"summary_l3": "文章围绕浏览器隔离机制展开，讨论攻击者如何利用边界不清或实现缺陷影响安全保证。它强调系统组件、攻击面和防护策略之间的关系，适合作为后续判断浏览器安全研究价值的基础材料。", '
+                '"tags": ["browser-security", "side-channel"]}'
             ]
         )
         pipeline = EnrichmentPipeline(
@@ -97,11 +99,13 @@ class EnrichmentPipelineTestCase(unittest.TestCase):
         enriched = pipeline.process(None)
 
         self.assertEqual(len(enriched), 1)
-        self.assertEqual(enriched[0].summary_l1, "A concise one-line summary.")
+        self.assertEqual(enriched[0].summary_l1, "这篇文章概述了浏览器隔离机制中的安全问题，并说明相关攻击面为什么值得持续关注。")
+        self.assertIn("浏览器隔离机制", enriched[0].summary_l3)
         self.assertEqual(enriched[0].tags, ["browser-security", "side-channel"])
         self.assertEqual(len(llm_client.calls), 1)
         self.assertEqual(llm_client.calls[0]["model_tier"], ModelTier.FAST)
-        self.assertTrue(str(llm_client.calls[0]["cache_key"]).startswith("enrichment_v1_"))
+        self.assertEqual(llm_client.calls[0]["max_tokens"], 900)
+        self.assertTrue(str(llm_client.calls[0]["cache_key"]).startswith("enrichment_v2-cn-detailed_"))
         self.assertIn("browser security", str(llm_client.calls[0]["prompt"]))
 
     def test_process_skips_artifacts_that_are_already_enriched(self) -> None:
@@ -117,6 +121,7 @@ class EnrichmentPipelineTestCase(unittest.TestCase):
         self._save_artifact(
             title="Already Enriched",
             summary_l1="Existing summary.",
+            summary_l3="Existing detailed summary.",
             tags=["existing-tag"],
         )
 
@@ -124,6 +129,53 @@ class EnrichmentPipelineTestCase(unittest.TestCase):
 
         self.assertEqual(enriched, [])
         self.assertEqual(llm_client.calls, [])
+
+    def test_process_reenriches_artifacts_missing_detailed_summary(self) -> None:
+        """Artifacts with only old L1 enrichment should receive summary_l3."""
+
+        llm_client = StubLLMClient(
+            [
+                '{"summary_l1": "旧条目现在会补充中文概览，方便在日报中快速判断是否值得阅读。", '
+                '"summary_l3": "这条内容原本只有较短摘要和标签，因此新版本会重新调用 LLM 补齐详细总结。详细总结会说明文章讨论的问题、涉及的系统或方法，以及它对每日情报消费的意义。", '
+                '"tags": ["summary-upgrade", "daily-review"]}',
+            ]
+        )
+        pipeline = EnrichmentPipeline(
+            session_factory=self.session_factory,
+            llm_client=llm_client,
+            prompt_template_path=self.workspace / "prompt.md",
+        )
+        (self.workspace / "prompt.md").write_text("{{artifact_context}}", encoding="utf-8")
+        artifact = self._save_artifact(
+            title="Old Enriched Artifact",
+            summary_l1="Old short summary.",
+            summary_l3=None,
+            tags=["existing-tag"],
+        )
+
+        enriched = pipeline.process([artifact.id])
+
+        self.assertEqual(len(enriched), 1)
+        self.assertIn("补齐详细总结", enriched[0].summary_l3)
+        self.assertEqual(enriched[0].tags, ["existing-tag", "summary-upgrade", "daily-review"])
+
+    def test_cache_key_changes_when_source_text_changes(self) -> None:
+        """Enrichment cache keys should not reuse summaries after crawler text improves."""
+
+        pipeline = EnrichmentPipeline(
+            session_factory=self.session_factory,
+            llm_client=StubLLMClient([]),
+            prompt_template_path=self.workspace / "prompt.md",
+        )
+        before = self._save_artifact(title="Changing Article", abstract=None)
+        after = self._save_artifact(title="Changing Article Copy", abstract="Now the crawler has article body text.")
+        after.canonical_id = before.canonical_id
+
+        before_key = pipeline._build_cache_key(before)
+        after_key = pipeline._build_cache_key(after)
+
+        self.assertNotEqual(before_key, after_key)
+        self.assertTrue(before_key.startswith("enrichment_v2-cn-detailed_"))
 
     def test_process_continues_when_one_artifact_enrichment_fails(self) -> None:
         """One failed artifact should not prevent the rest from being enriched."""
@@ -216,6 +268,10 @@ class EnrichmentPipelineTestCase(unittest.TestCase):
             'VETEOS is a static analysis tool for EOSIO contracts that detects "Groundhog Day" vulnerabilities.',
         )
         self.assertEqual(
+            enriched[0].summary_l3,
+            'VETEOS is a static analysis tool for EOSIO contracts that detects "Groundhog Day" vulnerabilities.',
+        )
+        self.assertEqual(
             enriched[0].tags,
             ["eosio-smart-contracts", "static-analysis", "blockchain-security"],
         )
@@ -283,6 +339,34 @@ class EnrichmentPipelineTestCase(unittest.TestCase):
             self.assertEqual(missing_count, 1)
         finally:
             session.close()
+
+    def test_request_delay_forces_sequential_processing(self) -> None:
+        """Configured request delay should serialize enrichment calls for rate-limited providers."""
+
+        llm_client = StubLLMClient(
+            [
+                '{"summary_l1": "Delayed summary.", "tags": ["rate-limit", "sequential", "analysis"]}',
+                '{"summary_l1": "Delayed summary.", "tags": ["rate-limit", "sequential", "analysis"]}',
+                '{"summary_l1": "Delayed summary.", "tags": ["rate-limit", "sequential", "analysis"]}',
+            ]
+        )
+        sleeps: list[float] = []
+        pipeline = EnrichmentPipeline(
+            session_factory=self.session_factory,
+            llm_client=llm_client,
+            prompt_template_path=self.workspace / "prompt.md",
+            max_workers=3,
+            request_delay_seconds=2.5,
+            sleep_fn=sleeps.append,
+        )
+        (self.workspace / "prompt.md").write_text("{{artifact_context}}", encoding="utf-8")
+        artifact_ids = [self._save_artifact(title=f"Delayed Artifact {index}").id for index in range(3)]
+
+        enriched = pipeline.process(artifact_ids)
+
+        self.assertEqual(len(enriched), 3)
+        self.assertEqual(sleeps, [2.5, 2.5])
+        self.assertEqual(len(llm_client.calls), 3)
 
     def _save_artifact(self, **kwargs) -> Artifact:
         """Persist one artifact with sensible defaults."""

@@ -36,7 +36,7 @@ v1 智能分析层设计了一条线性 LLM 链：`deep-analyze → cluster → 
 |------|------|------|---------|
 | T1 最权威最慢 | 四大顶会 | 经同行评审，1-2 年时滞 | 学术界已确立的研究方向 |
 | T2 较权威较新 | arXiv | 未经评审，最新研究 | 趋势萌芽，新兴方向 |
-| T3 权威+新潮 | Project Zero / PortSwigger / Cloudflare | 机构背书，实际攻击面 | 工业需求信号 |
+| T3 权威+新潮 | Project Zero / PortSwigger / OpenAI / Anthropic / Brutecat / HackTron / Black Hat / DEF CON / RSAC / BSidesSF | 机构背书，实际攻击面 | 工业需求信号 |
 | T4 快但不权威 | 个人博客 / 公众号 | 实时热点，质量参差 | 快速热点信号 |
 
 **关键洞察**：不同层级的信息应分轨处理、各自产出，最后交叉比对——而非拍平排序。
@@ -121,7 +121,7 @@ T1+T2 学术论文 (~2000 篇域内)     T3+T4 行业博客 (~100 篇)
 class SourceTier(str, Enum):
     T1_CONFERENCE = "t1-conference"        # 四大顶会
     T2_ARXIV = "t2-arxiv"                 # arXiv
-    T3_RESEARCH_BLOG = "t3-research-blog"  # Project Zero, PortSwigger, Cloudflare
+    T3_RESEARCH_BLOG = "t3-research-blog"  # Curated research blogs and industry conference topic sources
     T4_PERSONAL = "t4-personal"            # 未来: 个人博客、公众号
 
 class InformationTrack(str, Enum):

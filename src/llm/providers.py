@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Any
 
@@ -47,6 +48,10 @@ class OpenAIProvider(LLMProvider):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.base_url = base_url or os.getenv("OPENAI_BASE_URL", DEFAULT_OPENAI_BASE_URL)
         self.session = session or requests.Session()
+        self.input_as_list = _env_bool("OPENAI_INPUT_AS_LIST", default=False)
+        self.stream = _env_bool("OPENAI_STREAM", default=False)
+        self.store = _env_bool_or_none("OPENAI_STORE")
+        self.omit_generation_params = _env_bool("OPENAI_OMIT_GENERATION_PARAMS", default=False)
 
     def default_model_map(self) -> dict[ModelTier, str]:
         """Return default OpenAI models for each tier."""
@@ -67,15 +72,20 @@ class OpenAIProvider(LLMProvider):
         self._require_api_key()
         payload = {
             "model": model,
-            "input": prompt,
-            "max_output_tokens": max_tokens,
-            "temperature": temperature,
+            "input": [{"role": "user", "content": prompt}] if self.input_as_list else prompt,
         }
+        if not self.omit_generation_params:
+            payload["max_output_tokens"] = max_tokens
+            payload["temperature"] = temperature
+        if self.store is not None:
+            payload["store"] = self.store
+        if self.stream:
+            payload["stream"] = True
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
-        data = self._post_json(headers=headers, payload=payload, timeout=timeout)
+        data = self._post_json(headers=headers, payload=payload, timeout=timeout, model=model)
         text = str(data.get("output_text") or self._extract_openai_text(data))
         usage = self._parse_usage(data.get("usage"))
         return LLMResponse(text=text, model=str(data.get("model", model)), usage=usage)
@@ -86,22 +96,86 @@ class OpenAIProvider(LLMProvider):
         if not self.api_key:
             raise LLMProviderError("Missing OPENAI_API_KEY", retryable=False)
 
-    def _post_json(self, *, headers: dict[str, str], payload: dict[str, Any], timeout: float) -> dict[str, Any]:
+    def _post_json(
+        self,
+        *,
+        headers: dict[str, str],
+        payload: dict[str, Any],
+        timeout: float,
+        model: str,
+    ) -> dict[str, Any]:
         """POST JSON to OpenAI and return a parsed JSON object."""
 
         try:
-            response = self.session.post(
-                self.base_url,
-                headers=headers,
-                json=payload,
-                timeout=timeout,
-            )
+            if self.stream:
+                response = self.session.post(
+                    self.base_url,
+                    headers=headers,
+                    json=payload,
+                    timeout=timeout,
+                    stream=True,
+                )
+            else:
+                response = self.session.post(
+                    self.base_url,
+                    headers=headers,
+                    json=payload,
+                    timeout=timeout,
+                )
         except requests.Timeout as exc:
             raise LLMProviderError("OpenAI request timed out", retryable=True) from exc
         except requests.RequestException as exc:
             raise LLMProviderError(f"OpenAI request failed: {exc}", retryable=True) from exc
 
+        if self.stream and response.status_code == 200:
+            return self._parse_stream_response(response, model=model)
         return _handle_response(response, provider_name=self.provider_name)
+
+    def _parse_stream_response(self, response: requests.Response | Any, *, model: str) -> dict[str, Any]:
+        """Parse a Responses API Server-Sent Events stream into a response-like payload."""
+
+        deltas: list[str] = []
+        done_text: str | None = None
+        completed_payload: dict[str, Any] | None = None
+
+        for raw_line in response.iter_lines(decode_unicode=False):
+            if isinstance(raw_line, bytes):
+                line = raw_line.decode("utf-8", errors="replace").strip()
+            else:
+                line = str(raw_line or "").strip()
+            if not line.startswith("data:"):
+                continue
+            raw_data = line.removeprefix("data:").strip()
+            if not raw_data or raw_data == "[DONE]":
+                continue
+            try:
+                event = json.loads(raw_data)
+            except json.JSONDecodeError:
+                continue
+
+            event_type = event.get("type")
+            if event_type == "response.output_text.delta":
+                delta = event.get("delta")
+                if delta:
+                    deltas.append(str(delta))
+            elif event_type == "response.output_text.done":
+                text = event.get("text")
+                if text:
+                    done_text = str(text)
+            elif event_type == "response.completed":
+                response_payload = event.get("response")
+                if isinstance(response_payload, dict):
+                    completed_payload = response_payload
+
+        output_text = "".join(deltas) or done_text or ""
+        if not output_text:
+            raise LLMProviderError("OpenAI stream response missing output text", retryable=False)
+
+        return {
+            "model": str((completed_payload or {}).get("model") or model),
+            "output_text": output_text,
+            "usage": (completed_payload or {}).get("usage"),
+        }
 
     def _extract_openai_text(self, payload: dict[str, Any]) -> str:
         """Fallback parser for Responses API output blocks."""
@@ -436,3 +510,21 @@ def _resolve_api_key(*env_vars: str) -> str | None:
         if value:
             return value
     return None
+
+
+def _env_bool(name: str, *, default: bool) -> bool:
+    """Parse a boolean environment variable."""
+
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_bool_or_none(name: str) -> bool | None:
+    """Parse an optional boolean environment variable."""
+
+    raw_value = os.getenv(name)
+    if raw_value is None or not raw_value.strip():
+        return None
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
