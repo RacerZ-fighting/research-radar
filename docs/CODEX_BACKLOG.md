@@ -79,6 +79,41 @@
 | RR-057 | Dashboard 搜索框 | done | RR-056 | Codex can do directly |
 | RR-058 | Curated research blog RSS expansion | done | RR-057 | Needs human review before merge |
 | RR-059 | Dashboard refresh backfill cap and progress | done | RR-058 | Codex can do directly |
+| RR-060 | Synacktiv Publications RSS source | done | RR-058 | Needs human review before merge |
+
+---
+
+## RR-060 Synacktiv Publications RSS source
+**Why now**  
+用户指定 Synacktiv 的 Argo CD / CodeQL RCE 研究文章，希望将 Synacktiv Publications 纳入日常工业界研究博客源。该站点内容偏漏洞研究、利用链分析、云原生安全与逆向，适合进入 curated research blog lane。
+
+**Involved files**
+- `config/sources.json`
+- `tests/test_source_config.py`
+- `docs/CURRENT_STATUS.md`
+- `docs/CODEX_BACKLOG.md`
+- `docs/RUNBOOK.md`
+- `docs/SOURCE_EXPANSION_PLAN.md`
+
+**Do**
+1. 确认 Synacktiv Publications 的官方 RSS 入口
+2. 复用现有 `RSSFeedCrawler`
+3. 不新增 crawler class
+4. live smoke 确认 feed 可返回用户指定文章
+5. 更新 source config 测试和运行文档
+
+**Done when**
+- `synacktiv-publications` 在 `config/sources.json` 中 enabled
+- `BLOG_CRAWLER_REGISTRY` 能注册该 RSS source
+- `crawl --source synacktiv-publications` 能返回 raw items
+
+**Completed (2026-07-07)**  
+- 新增 enabled RSS source `synacktiv-publications`，RSS URL 为 `https://www.synacktiv.com/en/feed/lastblog.xml`。
+- live feed smoke 返回 30 条 entries，包含 `Caught in the Octopus Trap: Unauthenticated RCE in Argo CD with CodeQL`。
+- 该 RSS 的 `pubDate` 当前为空；Dashboard/date refresh 首次抓取会按 `created_at` 兜底，后续去重依赖 canonical URL。
+
+**Review**  
+Needs human review before merge
 
 ---
 

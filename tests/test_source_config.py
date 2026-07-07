@@ -64,6 +64,7 @@ def test_enabled_rss_sources_are_registered_for_crawl() -> None:
         "github-blog-security",
         "assetnote-research",
         "bishopfox-blog",
+        "synacktiv-publications",
     }
     for slug in rss_slugs:
         assert slug in BLOG_CRAWLER_REGISTRY
@@ -163,6 +164,7 @@ def test_resolve_source_slug_accepts_aliases() -> None:
     assert resolve_source_slug("project_zero") == "project-zero"
     assert resolve_source_slug("PortSwigger Research") == "portswigger"
     assert resolve_source_slug("Trail of Bits") == "trail-of-bits"
+    assert resolve_source_slug("Synacktiv") == "synacktiv-publications"
     assert resolve_source_slug("USENIX_SECURITY") == "usenix-security"
 
 

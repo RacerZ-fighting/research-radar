@@ -238,6 +238,21 @@
       "tags": ["vulnerability-research", "attack-surface", "research-blog"]
     },
     {
+      "slug": "synacktiv-publications",
+      "name": "Synacktiv Publications",
+      "source_type": "blogs",
+      "tier": "t3-research-blog",
+      "track": "industry",
+      "adapter": "rss",
+      "enabled": true,
+      "aliases": ["synacktiv", "synacktiv publications", "synacktiv blog"],
+      "urls": {
+        "homepage": "https://www.synacktiv.com/en/publications",
+        "rss": "https://www.synacktiv.com/en/feed/lastblog.xml"
+      },
+      "tags": ["vulnerability-research", "exploit-research", "research-blog"]
+    },
+    {
       "slug": "hacktron-ai",
       "name": "HackTron AI",
       "source_type": "blogs",
