@@ -253,6 +253,21 @@
       "tags": ["vulnerability-research", "exploit-research", "research-blog"]
     },
     {
+      "slug": "govuln-news",
+      "name": "Govuln Sec-News",
+      "source_type": "blogs",
+      "tier": "t3-research-blog",
+      "track": "industry",
+      "adapter": "rss",
+      "enabled": true,
+      "aliases": ["govuln", "govuln news", "sec-news", "安全文摘"],
+      "urls": {
+        "homepage": "https://govuln.com/news/",
+        "rss": "https://govuln.com/news/feed/"
+      },
+      "tags": ["security-news", "vulnerability-research", "aggregator"]
+    },
+    {
       "slug": "hacktron-ai",
       "name": "HackTron AI",
       "source_type": "blogs",

@@ -22,7 +22,7 @@
 - RawFetch + canonical_id + upsert 已经提供可重跑基础
 - source metadata 已集中到 `config/sources.json`
 - enabled RSS source 已支持通过通用 `RSSFeedCrawler` 进入 raw JSON 链路
-- curated research blog RSS 源已扩展：Trail of Bits、Google Online Security Blog、GitHub Blog Security、Assetnote Research、Bishop Fox Blog、Synacktiv Publications 均进入集中配置并复用通用 RSS crawler；GitHub Security Lab feed 当前返回 0 entries，暂不接入默认配置
+- curated research blog RSS 源已扩展：Trail of Bits、Google Online Security Blog、GitHub Blog Security、Assetnote Research、Bishop Fox Blog、Synacktiv Publications、Govuln Sec-News 均进入集中配置并复用通用 RSS crawler；GitHub Security Lab feed 当前返回 0 entries，暂不接入默认配置
 - enabled sitemap source 已支持通过通用 `SitemapCrawler` 进入 raw JSON 链路；Anthropic News 当前走 sitemap
 - enabled webpage source 已支持通过通用 `WebpageCrawler` 进入 raw JSON 链路；Brutecat / HackTron 已通过 live smoke
 - DEF CON 已使用专用 talk crawler 抓取公开 speaker/talk 页面，输出进入 Industry conferences lane；crawler 会优先探测当前年份对应届数，当前 DEF CON 34 speakers 页在 2026-07-03 实测 404，因此回退展示 DEF CON 33，并在卡片上显式标记届数
@@ -275,6 +275,7 @@
 - 2026-07-06: 准备并完成 RR-058 Curated research blog RSS expansion；用户指出博客系统数据源偏少。本次新增 Trail of Bits、Google Online Security Blog、GitHub Blog Security、Assetnote Research、Bishop Fox Blog 五个 enabled RSS source，全部复用现有 RSS crawler，不新增 schema、不改 scoring/triage 阈值；GitHub Security Lab feed 当前返回 0 entries，暂不纳入默认配置。
 - 2026-07-06: 准备并完成 RR-059 Dashboard refresh backfill cap and progress；用户发现新增 RSS 源后 `Refresh today` 卡在 45%。根因是新增源首次抓取产生大量历史 backfill，Dashboard 单 worker 顺序 LLM enrichment 期间没有 item-level progress。现在 Dashboard refresh 默认最多处理 30 个 LLM target，CLI daily-refresh 默认不限制；enrichment / relevance 阶段会回传 `n/total - title` 进度。
 - 2026-07-07: 准备并完成 RR-060 Synacktiv Publications RSS source；用户指定 Synacktiv Argo CD / CodeQL RCE 文章。本次新增 `synacktiv-publications` enabled RSS source，复用 `RSSFeedCrawler`，不新增 crawler class、不改 schema、不改 scoring/triage 阈值；live feed smoke 返回 30 条并包含目标文章。该 feed 的 `pubDate` 当前为空，日期归属会按 `created_at` 兜底。
+- 2026-07-07: 准备并完成 RR-061 Govuln Sec-News RSS source；用户指定 `https://govuln.com/news/`。页面声明 Atom feed `https://govuln.com/news/feed/`，本次新增 `govuln-news` enabled RSS source，复用 `RSSFeedCrawler`，不新增 crawler class、不改 schema、不改 scoring/triage 阈值；live feed smoke 返回 15 条并包含 published/updated 时间。该 source 是安全文摘/聚合源，后续展示继续依赖 LLM 相关度过滤。
 - 2026-06-16: 准备处理 Zotero 个性化相关度路线的文档落位；假设本次只新增设计文档和 backlog，不涉及 schema 变更、scoring 阈值变更、新 source 接入或 report 文件兼容策略调整。
 - 2026-06-16: 完成 Zotero relevance 简化方案落位：Better CSL JSON 作为输入，Zotero 作为检索语料，agent 结合 top-k Zotero 证据与作者/课题组质量信号做判断；新增 RR-011/RR-012。
 - 2026-04-09: 准备处理 RR-001 的 iteration_plan 收敛与旧文档清理；假设只删除明确的草稿/垃圾文件，不删除仍有历史参考价值的 dated 文档。

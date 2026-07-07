@@ -80,6 +80,41 @@
 | RR-058 | Curated research blog RSS expansion | done | RR-057 | Needs human review before merge |
 | RR-059 | Dashboard refresh backfill cap and progress | done | RR-058 | Codex can do directly |
 | RR-060 | Synacktiv Publications RSS source | done | RR-058 | Needs human review before merge |
+| RR-061 | Govuln Sec-News RSS source | done | RR-058 | Needs human review before merge |
+
+---
+
+## RR-061 Govuln Sec-News RSS source
+**Why now**  
+用户指定 `https://govuln.com/news/` 并询问 RSS 订阅链接能否加入。页面声明了 Atom feed，内容覆盖漏洞复现、补丁审计、AI-assisted vulnerability research 和安全文摘，适合补充 industry blog/news lane，但作为聚合源需要继续依赖 LLM 相关度过滤。
+
+**Involved files**
+- `config/sources.json`
+- `tests/test_source_config.py`
+- `docs/CURRENT_STATUS.md`
+- `docs/CODEX_BACKLOG.md`
+- `docs/RUNBOOK.md`
+- `docs/SOURCE_EXPANSION_PLAN.md`
+
+**Do**
+1. 确认页面声明的 RSS/Atom feed
+2. 复用现有 `RSSFeedCrawler`
+3. 不新增 crawler class
+4. live smoke 确认 feed 可返回有效 entries 和发布时间
+5. 更新 source config 测试和运行文档
+
+**Done when**
+- `govuln-news` 在 `config/sources.json` 中 enabled
+- `BLOG_CRAWLER_REGISTRY` 能注册该 RSS source
+- `crawl --source govuln-news` 能返回 raw items
+
+**Completed (2026-07-07)**  
+- 新增 enabled RSS source `govuln-news`，RSS URL 为 `https://govuln.com/news/feed/`。
+- live feed smoke 返回 15 条 entries，包含 published/updated 时间。
+- 该 source 是安全文摘/聚合源，tags 标记为 `security-news`、`vulnerability-research`、`aggregator`，后续展示仍依赖 LLM 相关度过滤。
+
+**Review**  
+Needs human review before merge
 
 ---
 
